@@ -43,12 +43,15 @@ if __name__ == '__main__':
 	parser = argparse.ArgumentParser(description = "trr2nc.py - Convert trr to nc with treating PBC", formatter_class=argparse.RawTextHelpFormatter)
 	parser.add_argument("-s", dest = "tpr", metavar = "tpr", required = True, help = "Gromacs topology file (.tpr)")
 	parser.add_argument("-f", dest = "trr", metavar = "trr", required = True, help = "Gromacs trajectory file (.trr, .xtc)")
-	parser.add_argument("-o", dest = "nc", metavar = "nc", required = True, help = "output for Amber trajectory (.nc)")
 	parser.add_argument("-p", dest = "prmtop", metavar = "prmtop", required = True, help = "Amber topology file (.prmtop)")
 	parser.add_argument("-m", dest = "mask", metavar = "mask", required = True, help = "fitting mask for cpptraj")
 	parser.add_argument("-gc", dest = "group_center", metavar = "center_of_group" , required = True, type = int, help = "center of group")
+	parser.add_argument("-o", dest = "nc", metavar = "nc", required = True, help = "output for Amber trajectory (.nc)")
 	parser.add_argument("-go", dest = "group_output", metavar = "output_of_group", default = 0, type = int, help = "output group for structure (Default: 0 - system)")
 	parser.add_argument("-n", dest = "ndx", metavar = "ndx", help = "index file for Gromacs (.ndx)")
+	parser.add_argument("-b", dest = "begin", metavar = "startTime", type = int, help = "First frame (ps) to read from trajectory")
+	parser.add_argument("-e", dest = "end", metavar = "startTime", type = int, help = "Last frame (ps) to read from trajectory")
+	parser.add_argument("-skip", dest = "skip", metavar = "skipFrame", type = int, help = "Only write every nr-th frame")
 	args = parser.parse_args()
 
 	# 必須ファイルの確認
@@ -73,7 +76,14 @@ if __name__ == '__main__':
 	log = []
 	sys.stderr.write("Create nojump trajectory ... ")
 	sys.stderr.flush()
-	command = "%s trjconv -s %s -f %s -o %s -pbc nojump <<'INPUT'\n%d\nINPUT" % (path_gmx, args.tpr, args.trr, tempfile_name1, args.group_output)
+	command = "%s trjconv -s %s -f %s -o %s -pbc nojump" % (path_gmx, args.tpr, args.trr, tempfile_name1)
+	if args.begin != None:
+		command += " -b %d" % args.begin
+	if args.end != None:
+		command += " -e %d" % args.end
+	if args.skip != None:
+		command += " -skip %d" % args.skip
+	command += " <<'INPUT'\n%d\nINPUT" % args.group_output
 	process = subprocess.Popen(command, shell = True, stdout = subprocess.PIPE, stderr = subprocess.PIPE)
 	while True:
 		# エラーログ取得
