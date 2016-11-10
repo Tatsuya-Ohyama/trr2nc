@@ -42,7 +42,7 @@ def check_command(command_name):
 if __name__ == '__main__':
 	parser = argparse.ArgumentParser(description = "trr2nc.py - Convert trr to nc with treating PBC", formatter_class=argparse.RawTextHelpFormatter)
 	parser.add_argument("-s", dest = "tpr", metavar = "tpr", required = True, help = "Gromacs topology file (.tpr)")
-	parser.add_argument("-f", dest = "trr", metavar = "trajectory", required = True, help = "Gromacs trajectory file (.trr, .xtc)")
+	parser.add_argument("-x", dest = "trr", metavar = "trajectory", required = True, help = "Gromacs trajectory file (.trr, .xtc)")
 	parser.add_argument("-p", dest = "prmtop", metavar = "prmtop", required = True, help = "Amber topology file (.prmtop)")
 	parser.add_argument("-m", dest = "mask", metavar = "mask", required = True, help = "fitting mask for cpptraj")
 	parser.add_argument("-gc", dest = "group_center", metavar = "center_of_group" , required = True, type = int, help = "center of group")
