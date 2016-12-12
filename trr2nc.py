@@ -111,7 +111,10 @@ if __name__ == '__main__':
 	log = []
 	sys.stderr.write("Create molecular centered trajectory ... ")
 	sys.stderr.flush()
-	command = "%s trjconv -s %s -f %s -o %s -center -pbc mol -ur compact <<'INPUT'\n%d\n%d\nINPUT" % (path_gmx, args.tpr, tempfile_name1, tempfile_name2, args.group_center, args.group_output)
+	command = "%s trjconv -s %s -f %s -o %s -center -pbc mol -ur compact " % (path_gmx, args.tpr, tempfile_name1, tempfile_name2)
+	if args.ndx != None:
+		command += "-n %s " % args.ndx
+	command += "<<'INPUT'\n%d\n%d\nINPUT" % (args.group_center, args.group_output)
 	process = subprocess.Popen(command, shell = True, stdout = subprocess.PIPE, stderr = subprocess.PIPE)
 	while True:
 		# エラーログ取得
