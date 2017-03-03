@@ -1,2 +1,2 @@
-syntax: blob
+syntax: glob
 modules/*

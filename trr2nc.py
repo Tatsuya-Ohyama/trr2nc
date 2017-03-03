@@ -17,10 +17,8 @@ sys.path.append(os.path.join(os.path.dirname(os.path.realpath(sys.argv[0])), "mo
 from py_module_basic import basic
 
 # =============== functions =============== #
-# check_command (コマンドの有無を確認)
 def check_command(command_name):
-	import subprocess
-
+	""" コマンドの有無を確認してコマンドの絶対パスを返す関数 """
 	process = subprocess.Popen("which %s" % command_name, shell = True, stdout = subprocess.PIPE, stderr = subprocess.PIPE)
 	(stdout, stderr) = process.communicate()
 
@@ -33,24 +31,124 @@ def check_command(command_name):
 	return command_path
 
 
+def pdbfix(input, output):
+	""" trjconv によって生成された PDB を tleap で読み込めるようにする関数 """
+	re_atom = re.compile(r"^(?:(?:ATOM)|(?:HETATM))")
+	with tempfile.TemporaryFile(mode = "r+") as obj_temp:
+		with open(input, "r") as obj_input:
+			for line in obj_input:
+				if re_atom.search(line):
+					line = line[0:54]
+					atomname = line[12:14].strip()
+					atomtype = line[12:16]
+					residuename = line[17:20]
+
+					if residuename == "SOL":
+						# 水分子
+						if "OW" in atomtype:
+							line = line[0 : 12] + " O  " + line[16 : 17] + "WAT" + line[20:]
+						elif "HW" in atomtype:
+							if "HW1" in atomtype:
+								line = line[0 : 12] + " H1 " + line[16 : 17] + "WAT" + line[20:]
+							elif "HW2" in atomtype:
+								line = line[0 : 12] + " H2 " + line[16 : 17] + "WAT" + line[20:]
+
+					elif "K" in atomname:
+						line = line[0 : 12] + " K+ " + line[16 : 17] + " K+" + line[20:]
+
+					elif "CL" in atomname:
+						line = line[0 : 12] + "Cl- " + line[16 : 17] + "Cl-" + line[20:]
+
+					line = "{0}\n".format(line)
+
+				obj_temp.write(line)
+
+		obj_temp.seek(0)
+		with open(output, "w") as obj_output:
+			for line in obj_temp:
+				obj_output.write(line)
+
+
+def exec_sp(command):
+	""" subprocess で外部プログラムを実行する関数 """
+	process = subprocess.Popen(command, shell = True, stdout = subprocess.PIPE, stderr = subprocess.PIPE)
+	streamdata = process.communicate()
+
+	if process.returncode == 1:
+		sys.stderr.write("ERROR: subprocess failed in make_prmtop():\n    '{0}'.\n".format(command))
+		sys.exit(1)
+
+
+def make_prmtop(tpr, trr, forcefields, output):
+	""" prmtop を作成する関数 """
+	command_tleap = check_command("tleap")
+	command_gmx = check_command("gmx")
+
+	tempfile_name = ""
+	with tempfile.NamedTemporaryFile(mode = "w", prefix = ".trr2nc_", delete = True, dir = ".") as obj_temp:
+		tempfile_name = obj_temp.name
+
+	tmp_gro = tempfile_name + ".gro"
+	tmp_pdb = tempfile_name + ".pdb"
+	tmp_in = tempfile_name + ".in"
+	tmp_inpcrd = tempfile_name + ".inpcrd"
+	exec_sp("{0} trjconv -s {1} -f {2} -o {3} -pbc nojump <<'EOF'\n0\nEOF".format(command_gmx, tpr, trr, tmp_gro))
+	exec_sp("{0} trjconv -s {1} -f {2} -o {3} -pbc mol -center -ur compact << 'EOF'\n1\n0\nEOF".format(command_gmx, tpr, tmp_gro, tmp_pdb))
+	pdbfix(tmp_pdb, tmp_pdb)
+	with open(tmp_in, "w") as obj_output:
+		for forcefield in forcefields:
+			obj_output.write("source {0}\n".format(forcefield))
+		obj_output.write("complex = loadpdb {0}\n".format(tmp_pdb))
+		obj_output.write("saveamberparm complex {0} {1}\n".format(output, tmp_inpcrd))
+		obj_output.write("quit\n")
+	exec_sp("{0} -f {1} << 'EOF'\nquit\nEOF".format(command_tleap, tmp_in))
+
+	os.remove(tmp_gro)
+	os.remove(tmp_pdb)
+	os.remove(tmp_in)
+	os.remove(tmp_inpcrd)
+
+
 # =============== main =============== #
 if __name__ == '__main__':
 	parser = argparse.ArgumentParser(description = "trr2nc.py - Convert trr to nc with treating PBC", formatter_class=argparse.RawTextHelpFormatter)
-	parser.add_argument("-s", dest = "tpr", metavar = "tpr", required = True, help = "Gromacs topology file (.tpr)")
 
-	parser.add_argument("-x", dest = "trr", metavar = "trajectory", required = True, help = "Gromacs trajectory file (.trr, .xtc)")
+	parser.add_argument("-s", dest = "tpr", metavar = "INPUT.tpr", required = True, help = "Gromacs topology file")
+	parser.add_argument("-x", dest = "trr", metavar = "INPUT.<trr|xtc>", required = True, help = "Gromacs trajectory file for input")
 
-	parser.add_argument("-p", dest = "prmtop", metavar = "prmtop", help = "Amber topology file (.prmtop)")
+	parser.add_argument("-pi", dest = "prmtop_input", metavar = "INPUT.prmtop", help = "Amber topology file")
 
-	parser.add_argument("-m", dest = "mask", metavar = "mask", required = True, help = "fitting mask for cpptraj")
-	parser.add_argument("-gc", dest = "group_center", metavar = "center_of_group" , required = True, type = int, help = "center of group")
-	parser.add_argument("-sm", dest = "strip_mask", metavar = "strip_mask", help = "strip mask for cpptraj")
-	parser.add_argument("-o", dest = "nc", metavar = "nc", required = True, help = "output for Amber trajectory (.nc)")
-	parser.add_argument("-n", dest = "ndx", metavar = "ndx", help = "index file for Gromacs (.ndx)")
-	parser.add_argument("-b", dest = "begin", metavar = "startTime", type = int, help = "First frame (ps) to read from trajectory")
-	parser.add_argument("-e", dest = "end", metavar = "startTime", type = int, help = "Last frame (ps) to read from trajectory")
-	parser.add_argument("-skip", dest = "skip", metavar = "skipFrame", type = int, help = "Only write every nr-th frame")
+	parser.add_argument("-po", dest = "prmtop_output", metavar = "OUTPUT.prmtop", help = "Amber topology file for input")
+	parser.add_argument("-ff", dest = "forcefield", metavar = "FF_FILE", nargs = "*", default = [], help = "Force field files of AMBER when not specify -pi")
+	# parser.add_argument("-m", dest = "mask", metavar = "mask", required = True, help = "fitting mask for cpptraj")
+	# parser.add_argument("-gc", dest = "group_center", metavar = "center_of_group" , required = True, type = int, help = "center of group")
+	# parser.add_argument("-sm", dest = "strip_mask", metavar = "strip_mask", help = "strip mask for cpptraj")
+	# parser.add_argument("-o", dest = "nc", metavar = "nc", required = True, help = "output for Amber trajectory (.nc)")
+	# parser.add_argument("-n", dest = "ndx", metavar = "ndx", help = "index file for Gromacs (.ndx)")
+	# parser.add_argument("-b", dest = "begin", metavar = "startTime", type = int, help = "First frame (ps) to read from trajectory")
+	# parser.add_argument("-e", dest = "end", metavar = "startTime", type = int, help = "Last frame (ps) to read from trajectory")
+	# parser.add_argument("-skip", dest = "skip", metavar = "skipFrame", type = int, help = "Only write every nr-th frame")
+	parser.add_argument("-O", dest = "flag_overwrite", action = "store_true", default = False, help = "overwrite forcibly")
 	args = parser.parse_args()
+
+	basic.check_exist(args.tpr, 2)
+	basic.check_exist(args.trr, 2)
+
+	if args.prmtop_input is None:
+		# prmtop がない場合
+
+		if len(args.forcefield) == 0:
+			# 力場ファイルが指定されていない場合
+			sys.stderr.write(" ERROR: -ff option is not specified when no -pi option\n")
+			sys.exit(1)
+
+		if args.prmtop_output is None:
+			sys.stderr.write(" ERROR: -po option does not specified when no -pi option\n")
+			sys.exit(1)
+
+		if args.flag_overwrite == False:
+			basic.check_overwrite(args.prmtop_output, args.forcefield)
+		make_prmtop(args.tpr, args.trr, args.forcefield, args.prmtop_output)
 
 
 # メモ 2016/12/12
