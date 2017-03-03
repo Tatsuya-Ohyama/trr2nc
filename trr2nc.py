@@ -88,12 +88,10 @@ def make_prmtop(tpr, trr, forcefields, output):
 	with tempfile.NamedTemporaryFile(mode = "w", prefix = ".trr2nc_", delete = True, dir = ".") as obj_temp:
 		tempfile_name = obj_temp.name
 
-	tmp_gro = tempfile_name + ".gro"
 	tmp_pdb = tempfile_name + ".pdb"
 	tmp_in = tempfile_name + ".in"
 	tmp_inpcrd = tempfile_name + ".inpcrd"
-	exec_sp("{0} trjconv -s {1} -f {2} -o {3} -pbc nojump <<'EOF'\n0\nEOF".format(command_gmx, tpr, trr, tmp_gro))
-	exec_sp("{0} trjconv -s {1} -f {2} -o {3} -pbc mol -center -ur compact << 'EOF'\n1\n0\nEOF".format(command_gmx, tpr, tmp_gro, tmp_pdb))
+	exec_sp("{0} trjconv -s {1} -f {2} -o {3} -pbc nojump <<'EOF'\n0\nEOF".format(command_gmx, tpr, trr, tmp_pdb))
 	pdbfix(tmp_pdb, tmp_pdb)
 	with open(tmp_in, "w") as obj_output:
 		for forcefield in forcefields:
@@ -103,7 +101,6 @@ def make_prmtop(tpr, trr, forcefields, output):
 		obj_output.write("quit\n")
 	exec_sp("{0} -f {1} << 'EOF'\nquit\nEOF".format(command_tleap, tmp_in))
 
-	os.remove(tmp_gro)
 	os.remove(tmp_pdb)
 	os.remove(tmp_in)
 	os.remove(tmp_inpcrd)
@@ -154,16 +151,6 @@ if __name__ == '__main__':
 
 """
 
-	# 必須ファイルの確認
-	check_file(args.tpr)
-	check_file(args.trr)
-	check_file(args.prmtop)
-	if args.ndx != None:
-		check_file(args.ndx)
-
-	# コマンドの確認
-	path_gmx = check_command("gmx")
-	path_cpptraj = check_command("cpptraj")
 
 	# 一時ファイル名取得
 	obj_temp = tempfile.NamedTemporaryFile(mode = "w", prefix = ".trr2nc_", delete = True, dir = ".")
