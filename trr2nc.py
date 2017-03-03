@@ -114,11 +114,9 @@ if __name__ == '__main__':
 	parser = argparse.ArgumentParser(description = "trr2nc.py - Convert trr to nc with treating PBC", formatter_class=argparse.RawTextHelpFormatter)
 
 	parser.add_argument("-s", dest = "tpr", metavar = "INPUT.tpr", required = True, help = "Gromacs topology file")
-	parser.add_argument("-x", dest = "trr", metavar = "INPUT.<trr|xtc>", required = True, help = "Gromacs trajectory file for input")
+	parser.add_argument("-x", dest = "trr", metavar = "INPUT.<trr|xtc|gro>", required = True, help = "Gromacs trajectory file for input")
 
-	parser.add_argument("-pi", dest = "prmtop_input", metavar = "INPUT.prmtop", help = "Amber topology file")
-
-	parser.add_argument("-po", dest = "prmtop_output", metavar = "OUTPUT.prmtop", help = "Amber topology file for input")
+	parser.add_argument("-p", dest = "prmtop", metavar = "INPUT.prmtop", required = True, help = "Amber topology file")
 	parser.add_argument("-ff", dest = "forcefield", metavar = "FF_FILE", nargs = "*", default = [], help = "Force field files of AMBER when not specify -pi")
 	# parser.add_argument("-m", dest = "mask", metavar = "mask", required = True, help = "fitting mask for cpptraj")
 	# parser.add_argument("-gc", dest = "group_center", metavar = "center_of_group" , required = True, type = int, help = "center of group")
@@ -134,21 +132,16 @@ if __name__ == '__main__':
 	basic.check_exist(args.tpr, 2)
 	basic.check_exist(args.trr, 2)
 
-	if args.prmtop_input is None:
+	if basic.check_exist(args.prmtop, 2):
 		# prmtop がない場合
-
 		if len(args.forcefield) == 0:
 			# 力場ファイルが指定されていない場合
 			sys.stderr.write(" ERROR: -ff option is not specified when no -pi option\n")
 			sys.exit(1)
 
-		if args.prmtop_output is None:
-			sys.stderr.write(" ERROR: -po option does not specified when no -pi option\n")
-			sys.exit(1)
-
 		if args.flag_overwrite == False:
 			basic.check_overwrite(args.prmtop_output, args.forcefield)
-		make_prmtop(args.tpr, args.trr, args.forcefield, args.prmtop_output)
+		make_prmtop(args.tpr, args.trr, args.forcefield, args.prmtop)
 
 
 # メモ 2016/12/12
