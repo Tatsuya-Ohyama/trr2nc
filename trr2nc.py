@@ -31,44 +31,6 @@ def check_command(command_name):
 	return command_path
 
 
-def pdbfix(input, output):
-	""" trjconv によって生成された PDB を tleap で読み込めるようにする関数 """
-	re_atom = re.compile(r"^(?:(?:ATOM)|(?:HETATM))")
-	with tempfile.TemporaryFile(mode = "r+") as obj_temp:
-		with open(input, "r") as obj_input:
-			for line in obj_input:
-				if re_atom.search(line):
-					line = line[0:54]
-					atomname = line[12:14].strip()
-					atomtype = line[12:16]
-					residuename = line[17:20]
-
-					if residuename == "SOL":
-						# 水分子
-						if "OW" in atomtype:
-							line = line[0 : 12] + " O  " + line[16 : 17] + "WAT" + line[20:]
-						elif "HW" in atomtype:
-							if "HW1" in atomtype:
-								line = line[0 : 12] + " H1 " + line[16 : 17] + "WAT" + line[20:]
-							elif "HW2" in atomtype:
-								line = line[0 : 12] + " H2 " + line[16 : 17] + "WAT" + line[20:]
-
-					elif "K" in atomname:
-						line = line[0 : 12] + " K+ " + line[16 : 17] + " K+" + line[20:]
-
-					elif "CL" in atomname:
-						line = line[0 : 12] + "Cl- " + line[16 : 17] + "Cl-" + line[20:]
-
-					line = "{0}\n".format(line)
-
-				obj_temp.write(line)
-
-		obj_temp.seek(0)
-		with open(output, "w") as obj_output:
-			for line in obj_temp:
-				obj_output.write(line)
-
-
 def exec_sp(command, operation = False):
 	""" subprocess で外部プログラムを実行する関数 """
 	if operation:
