@@ -69,232 +69,115 @@ def pdbfix(input, output):
 				obj_output.write(line)
 
 
-def exec_sp(command):
+def exec_sp(command, operation = False):
 	""" subprocess で外部プログラムを実行する関数 """
-	process = subprocess.Popen(command, shell = True, stdout = subprocess.PIPE, stderr = subprocess.PIPE)
+	if operation:
+		process = subprocess.Popen(command, shell = True)
+	else:
+		process = subprocess.Popen(command, shell = True, stdout = subprocess.PIPE, stderr = subprocess.PIPE)
 	streamdata = process.communicate()
 
 	if process.returncode == 1:
-		sys.stderr.write("ERROR: subprocess failed in make_prmtop():\n    '{0}'.\n".format(command))
+		sys.stderr.write("ERROR: subprocess failed\n    '{0}'.\n".format(command))
 		sys.exit(1)
 
 
-def make_prmtop(tpr, trr, forcefields, output):
+def make_prmtop(top, prmtop, strip_mask):
 	""" prmtop を作成する関数 """
-	command_tleap = check_command("tleap")
+	tempfile_name = ""
+	with tempfile.NamedTemporaryFile(mode = "w", prefix = ".trr2nc_", dir = ".") as obj_temp:
+		tempfile_name = obj_temp.name
+
+	command_parmed = check_command("parmed")
+	temp_in = tempfile_name + ".in"
+	with open(temp_in, "w") as obj_output:
+		obj_output.write("gromber {0}\n".format(top))
+		obj_output.write("outparm {0}\n".format(prmtop))
+		obj_output.write("quit\n")
+	exec_sp("{0} -n < {1}".format(command_parmed, temp_in))
+	os.remove(temp_in)
+
+
+def convert_trajectory(tpr, trr, begin, end, prmtop, strip_mask, fitting_mask, output):
 	command_gmx = check_command("gmx")
 
 	tempfile_name = ""
-	with tempfile.NamedTemporaryFile(mode = "w", prefix = ".trr2nc_", delete = True, dir = ".") as obj_temp:
+	with tempfile.NamedTemporaryFile(mode = "w", prefix = ".trr2nc_", dir = ".") as obj_temp:
 		tempfile_name = obj_temp.name
 
-	tmp_pdb = tempfile_name + ".pdb"
-	tmp_in = tempfile_name + ".in"
-	tmp_inpcrd = tempfile_name + ".inpcrd"
-	exec_sp("{0} trjconv -s {1} -f {2} -o {3} -pbc nojump <<'EOF'\n0\nEOF".format(command_gmx, tpr, trr, tmp_pdb))
-	pdbfix(tmp_pdb, tmp_pdb)
-	with open(tmp_in, "w") as obj_output:
-		for forcefield in forcefields:
-			obj_output.write("source {0}\n".format(forcefield))
-		obj_output.write("complex = loadpdb {0}\n".format(tmp_pdb))
-		obj_output.write("saveamberparm complex {0} {1}\n".format(output, tmp_inpcrd))
-		obj_output.write("quit\n")
-	exec_sp("{0} -f {1} << 'EOF'\nquit\nEOF".format(command_tleap, tmp_in))
+	# 周期境界条件でジャンプしないトラジェクトリの作成
+	temp_traj1 = tempfile_name + "1.trr"
+	trajectories = " ".join(trr)
+	command = "{0} trjconv -s {1} -f {2} -o {3} -pbc nojump".format(command_gmx, tpr, trajectories, temp_traj1)
+	if begin is not None:
+		command += " -b {0}".format(begin)
+	if end is not None:
+		command += " -e {0}".format(end)
+	command += " << 'EOF'\n0\nEOF"
+	exec_sp(command)
 
-	os.remove(tmp_pdb)
-	os.remove(tmp_in)
-	os.remove(tmp_inpcrd)
+	# 特定分子を中央に配置したトラジェクトリの作成
+	temp_traj2 = tempfile_name + "2.trr"
+	exec_sp("{0} trjconv -s {1} -f {2} -o {3} -pbc mol -center -ur compact << 'EOF'\n0\n0\nEOF".format(command_gmx, tpr, temp_traj1, temp_traj2))
+	os.remove(temp_traj1)
+
+	# nc ファイルに変換
+	temp_in = tempfile_name + ".in"
+	with open(temp_in, "w") as obj_output:
+		obj_output.write("parm {0}\n".format(prmtop))
+		obj_output.write("trajin {0}\n".format(temp_traj2))
+		if strip_mask is not None:
+			obj_output.write("strip {0}\n".format(strip_mask))
+		if fitting_mask is not None:
+			obj_output.write("rms {0} first mass\n".format(fitting_mask))
+		obj_output.write("trajout {0}\n".format(output))
+		obj_output.write("go\n")
+		if strip_mask is not None:
+			obj_output.write("clear trajin\n")
+			obj_output.write("parmstrip {0}\n".format(strip_mask))
+			obj_output.write("parmwrite out {0}\n".format(prmtop))
+			obj_output.write("go\n")
+
+	command_cpptraj = check_command("cpptraj")
+	exec_sp("{0} -i {1}".format(command_cpptraj, temp_in))
+
+	os.remove(temp_traj2)
+	os.remove(temp_in)
 
 
 # =============== main =============== #
 if __name__ == '__main__':
 	parser = argparse.ArgumentParser(description = "trr2nc.py - Convert trr to nc with treating PBC", formatter_class=argparse.RawTextHelpFormatter)
 
-	parser.add_argument("-s", dest = "tpr", metavar = "INPUT.tpr", required = True, help = "Gromacs topology file")
-	parser.add_argument("-x", dest = "trr", metavar = "INPUT.<trr|xtc|gro>", required = True, help = "Gromacs trajectory file for input")
-
+	parser.add_argument("-s", dest = "tpr", metavar = "INPUT.tpr", required = True, help = "Gromacs run input file")
+	parser.add_argument("-x", dest = "trr", metavar = "INPUT.<trr|xtc|gro>", nargs = "+", help = "Gromacs trajectory file")
+	parser.add_argument("-o", dest = "nc", metavar = "OUTPUT.<nc|mdcrd>", required = True, help = "output for Amber trajectory (.nc)")
 	parser.add_argument("-p", dest = "prmtop", metavar = "INPUT.prmtop", required = True, help = "Amber topology file")
-	parser.add_argument("-ff", dest = "forcefield", metavar = "FF_FILE", nargs = "*", default = [], help = "Force field files of AMBER when not specify -pi")
-	# parser.add_argument("-m", dest = "mask", metavar = "mask", required = True, help = "fitting mask for cpptraj")
-	# parser.add_argument("-gc", dest = "group_center", metavar = "center_of_group" , required = True, type = int, help = "center of group")
-	# parser.add_argument("-sm", dest = "strip_mask", metavar = "strip_mask", help = "strip mask for cpptraj")
-	# parser.add_argument("-o", dest = "nc", metavar = "nc", required = True, help = "output for Amber trajectory (.nc)")
-	# parser.add_argument("-n", dest = "ndx", metavar = "ndx", help = "index file for Gromacs (.ndx)")
-	# parser.add_argument("-b", dest = "begin", metavar = "startTime", type = int, help = "First frame (ps) to read from trajectory")
-	# parser.add_argument("-e", dest = "end", metavar = "startTime", type = int, help = "Last frame (ps) to read from trajectory")
-	# parser.add_argument("-skip", dest = "skip", metavar = "skipFrame", type = int, help = "Only write every nr-th frame")
+
+	gmx_option = parser.add_argument_group("gromacs option")
+	gmx_option.add_argument("-b", dest = "begin", metavar = "START_TIME", type = int, help = "First frame (ps) to read from trajectory")
+	gmx_option.add_argument("-e", dest = "end", metavar = "END_TIME", type = int, help = "Last frame (ps) to read from trajectory")
+	gmx_option.add_argument("-t", dest = "top", metavar = "INPUT.top", help = "Gromacs topology file when prmtop does not exist")
+
+	cpptraj_option = parser.add_argument_group("cpptraj option")
+	cpptraj_option.add_argument("-mf", dest = "fitting_mask", metavar = "FITTING_MASK", help = "fitting mask for cpptraj")
+	cpptraj_option.add_argument("-ms", dest = "strip_mask", metavar = "STRIP_MASK", help = "strip mask for cpptraj")
+
 	parser.add_argument("-O", dest = "flag_overwrite", action = "store_true", default = False, help = "overwrite forcibly")
+
 	args = parser.parse_args()
 
 	basic.check_exist(args.tpr, 2)
-	basic.check_exist(args.trr, 2)
+	for trj_file in args.trr:
+		basic.check_exist(trj_file, 2)
 
-	if basic.check_exist(args.prmtop, 2):
+	if os.path.exists(args.prmtop) == False:
 		# prmtop がない場合
-		if len(args.forcefield) == 0:
+		if args.top is None:
 			# 力場ファイルが指定されていない場合
-			sys.stderr.write(" ERROR: -ff option is not specified when no -pi option\n")
+			sys.stderr.write(" ERROR: -t option is not specified when prmtop does not exist\n")
 			sys.exit(1)
 
-		if args.flag_overwrite == False:
-			basic.check_overwrite(args.prmtop_output, args.forcefield)
-		make_prmtop(args.tpr, args.trr, args.forcefield, args.prmtop)
+		make_prmtop(args.top, args.prmtop, args.strip_mask)
 
-
-# メモ 2016/12/12
-# 1. cpptraj で prmtop を読み込み
-# 2. アウトプットで指定された prmtop を作成
-# 3. 中心に合わせた prmtop を作成
-# 4. prmtop を読み込み、原子順序番号が列挙された ndx ファイルをプログラム内で作成
-# 5. 作成した ndx ファイルを gmx に与えて実行
-
-
-"""
-
-
-	# 一時ファイル名取得
-	obj_temp = tempfile.NamedTemporaryFile(mode = "w", prefix = ".trr2nc_", delete = True, dir = ".")
-	random_name = obj_temp.name
-	obj_temp.close()
-	tempfile_prmtop = random_name + "_prmtop.prmtop"
-	tempfile_nojump = random_name + "_nojump.trr"
-	tempfile_center = random_name + "_center.trr"
-
-	# strip された prmtop 作成
-	prmtop = args.prmtop
-	if args.strip_mask != None:
-		tempfile_in = random_name + "_prmtop.prmtop"
-		cpptraj_infile = [
-			"parm %s" % args.prmtop,
-			"parmstrip %s" % args.strip_mask,
-			"parmwrite out %s" % tempfile_prmtop,
-			"go"
-		]
-		command = "%s <<'INPUT'\n%s\nINPUT" % (path_cpptraj, "\n".join(cpptraj_infile))
-		process = subprocess.Popen(command, shell = True, stdout = subprocess.PIPE, stderr = subprocess.PIPE)
-		while True:
-			# エラーログ取得
-			line = process.stderr.readline().decode("utf-8").rstrip("\r\n")
-			if line:
-				log.append(line)
-			if not line and process.poll() is not None:
-				break
-		process.wait()
-		if process.returncode == 0:
-			# コマンド成功
-			sys.stderr.write("done\n")
-		else:
-			# コマンド失敗
-			message = "\nSomething wrong in follow command\n %s\n" % command
-			sys.stderr.write(message)
-			sys.stderr.write("Check follow STDERR:\n")
-			for line in log:
-				line = line + "\n"
-				sys.stderr.write(line)
-			sys.exit(1)
-		prmtop = tempfile_prmtop
-
-
-	# 周期境界でジャンプしないトラジェクトリの作成
-	log = []
-	sys.stderr.write("Create nojump trajectory ... ")
-	sys.stderr.flush()
-	command = "%s trjconv -s %s -f %s -o %s -pbc nojump" % (path_gmx, args.tpr, args.trr, tempfile_nojump)
-	if args.begin != None:
-		command += " -b %d" % args.begin
-	if args.end != None:
-		command += " -e %d" % args.end
-	if args.skip != None:
-		command += " -skip %d" % args.skip
-	command += " <<'INPUT'\n%d\nINPUT" % args.group_center
-	process = subprocess.Popen(command, shell = True, stdout = subprocess.PIPE, stderr = subprocess.PIPE)
-	while True:
-		# エラーログ取得
-		line = process.stderr.readline().decode("utf-8").rstrip("\r\n")
-		if line:
-			log.append(line)
-		if not line and process.poll() is not None:
-			break
-	process.wait()
-	if process.returncode == 0:
-		# コマンド成功
-		sys.stderr.write("done\n")
-	else:
-		# コマンド失敗
-		message = "\nSomething wrong in follow command\n %s\n" % command
-		sys.stderr.write(message)
-		sys.stderr.write("Check follow STDERR:\n")
-		for line in log:
-			line = line + "\n"
-			sys.stderr.write(line)
-		sys.exit(1)
-
-
-	# ターゲット分子を中心としたトラジェクトリの作成
-	log = []
-	sys.stderr.write("Create molecular centered trajectory ... ")
-	sys.stderr.flush()
-	command = "%s trjconv -s %s -f %s -o %s -center -pbc mol -ur compact " % (path_gmx, args.tpr, tempfile_nojump, tempfile_center)
-	if args.ndx != None:
-		command += "-n %s " % args.ndx
-	command += "<<'INPUT'\n%d\n0\nINPUT" % (args.group_center)
-	process = subprocess.Popen(command, shell = True, stdout = subprocess.PIPE, stderr = subprocess.PIPE)
-	while True:
-		# エラーログ取得
-		line = process.stderr.readline().decode("utf-8").rstrip("\r\n")
-		if line:
-			log.append(line)
-		if not line and process.poll() is not None:
-			break
-	process.wait()
-	if process.returncode == 0:
-		# コマンド成功
-		sys.stderr.write("done\n")
-	else:
-		# コマンド失敗
-		message = "\nSomething wrong in follow command\n %s\n" % command
-		sys.stderr.write(message)
-		sys.stderr.write("Check follow STDERR:\n")
-		for line in log:
-			line = line + "\n"
-			sys.stderr.write(line)
-		sys.exit(1)
-
-	# AMBER 用トラジェクトリ作成
-	log = []
-	sys.stderr.write("Create AMBER trajectory ... ")
-	sys.stderr.flush()
-	cpptraj_infile = [
-		"parm %s" % args.prmtop,
-		"trajin %s" % tempfile_center,
-		"autoimage",
-		"rms %s first mass" % args.mask,
-		"trajout %s" % args.nc,
-		"go"
-	]
-	command = "%s <<'INPUT'\n%s\nINPUT" % (path_cpptraj, "\n".join(cpptraj_infile))
-	process = subprocess.Popen(command, shell = True, stdout = subprocess.PIPE, stderr = subprocess.PIPE)
-	while True:
-		# エラーログ取得
-		line = process.stderr.readline().decode("utf-8").rstrip("\r\n")
-		if line:
-			log.append(line)
-		if not line and process.poll() is not None:
-			break
-	process.wait()
-	if process.returncode == 0:
-		# コマンド成功
-		sys.stderr.write("done\n")
-	else:
-		# コマンド失敗
-		message = "\nSomething wrong in follow command\n %s\n" % command
-		sys.stderr.write(message)
-		sys.stderr.write("Check follow STDERR:\n")
-		for line in log:
-			line = line + "\n"
-			sys.stderr.write(line)
-		sys.exit(1)
-
-	os.remove(tempfile_nojump)
-	os.remove(tempfile_center)
-"""
+	convert_trajectory(args.tpr, args.trr, args.begin, args.end, args.prmtop, args.strip_mask, args.fitting_mask, args.nc)
