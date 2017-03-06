@@ -84,6 +84,7 @@ def exec_sp(command, operation = False):
 
 def make_prmtop(top, prmtop, strip_mask):
 	""" prmtop を作成する関数 """
+	sys.stderr.write("{start}Creating prmtop ({file}){end}\n".format(file = prmtop, start = basic.color.LRED + basic.color.BOLD, end = basic.color.END))
 	tempfile_name = ""
 	with tempfile.NamedTemporaryFile(mode = "w", prefix = ".trr2nc_", dir = ".") as obj_temp:
 		tempfile_name = obj_temp.name
@@ -94,7 +95,7 @@ def make_prmtop(top, prmtop, strip_mask):
 		obj_output.write("gromber {0}\n".format(top))
 		obj_output.write("outparm {0}\n".format(prmtop))
 		obj_output.write("quit\n")
-	exec_sp("{0} -n < {1}".format(command_parmed, temp_in))
+	exec_sp("{0} -n < {1}".format(command_parmed, temp_in), True)
 	os.remove(temp_in)
 
 
@@ -107,6 +108,7 @@ def convert_trajectory(tpr, trr, begin, end, prmtop, strip_mask, fitting_mask, o
 
 	# 周期境界条件でジャンプしないトラジェクトリの作成
 	temp_traj1 = tempfile_name + "1.trr"
+	sys.stderr.write("{start}Creating nojumped trajectory ({file}){end}\n".format(file = temp_traj1, start = basic.color.LRED + basic.color.BOLD, end = basic.color.END))
 	trajectories = " ".join(trr)
 	command = "{0} trjconv -s {1} -f {2} -o {3} -pbc nojump".format(command_gmx, tpr, trajectories, temp_traj1)
 	if begin is not None:
@@ -114,15 +116,17 @@ def convert_trajectory(tpr, trr, begin, end, prmtop, strip_mask, fitting_mask, o
 	if end is not None:
 		command += " -e {0}".format(end)
 	command += " << 'EOF'\n0\nEOF"
-	exec_sp(command)
+	exec_sp(command, True)
 
 	# 特定分子を中央に配置したトラジェクトリの作成
 	temp_traj2 = tempfile_name + "2.trr"
-	exec_sp("{0} trjconv -s {1} -f {2} -o {3} -pbc mol -center -ur compact << 'EOF'\n0\n0\nEOF".format(command_gmx, tpr, temp_traj1, temp_traj2))
+	sys.stderr.write("{start}Creating solute centered trajectory ({file}){end}\n".format(file = temp_traj2, start = basic.color.LRED + basic.color.BOLD, end = basic.color.END))
+	exec_sp("{0} trjconv -s {1} -f {2} -o {3} -pbc mol -center -ur compact << 'EOF'\n0\n0\nEOF".format(command_gmx, tpr, temp_traj1, temp_traj2), True)
 	os.remove(temp_traj1)
 
 	# nc ファイルに変換
 	temp_in = tempfile_name + ".in"
+	sys.stderr.write("{start}Converting AMBER trajectory ({file}){end}\n".format(file = output, start = basic.color.LRED + basic.color.BOLD, end = basic.color.END))
 	with open(temp_in, "w") as obj_output:
 		obj_output.write("parm {0}\n".format(prmtop))
 		obj_output.write("trajin {0}\n".format(temp_traj2))
@@ -139,7 +143,7 @@ def convert_trajectory(tpr, trr, begin, end, prmtop, strip_mask, fitting_mask, o
 			obj_output.write("go\n")
 
 	command_cpptraj = check_command("cpptraj")
-	exec_sp("{0} -i {1}".format(command_cpptraj, temp_in))
+	exec_sp("{0} -i {1}".format(command_cpptraj, temp_in), True)
 
 	os.remove(temp_traj2)
 	os.remove(temp_in)
