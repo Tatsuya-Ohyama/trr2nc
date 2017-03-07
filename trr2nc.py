@@ -31,44 +31,6 @@ def check_command(command_name):
 	return command_path
 
 
-def pdbfix(input, output):
-	""" trjconv によって生成された PDB を tleap で読み込めるようにする関数 """
-	re_atom = re.compile(r"^(?:(?:ATOM)|(?:HETATM))")
-	with tempfile.TemporaryFile(mode = "r+") as obj_temp:
-		with open(input, "r") as obj_input:
-			for line in obj_input:
-				if re_atom.search(line):
-					line = line[0:54]
-					atomname = line[12:14].strip()
-					atomtype = line[12:16]
-					residuename = line[17:20]
-
-					if residuename == "SOL":
-						# 水分子
-						if "OW" in atomtype:
-							line = line[0 : 12] + " O  " + line[16 : 17] + "WAT" + line[20:]
-						elif "HW" in atomtype:
-							if "HW1" in atomtype:
-								line = line[0 : 12] + " H1 " + line[16 : 17] + "WAT" + line[20:]
-							elif "HW2" in atomtype:
-								line = line[0 : 12] + " H2 " + line[16 : 17] + "WAT" + line[20:]
-
-					elif "K" in atomname:
-						line = line[0 : 12] + " K+ " + line[16 : 17] + " K+" + line[20:]
-
-					elif "CL" in atomname:
-						line = line[0 : 12] + "Cl- " + line[16 : 17] + "Cl-" + line[20:]
-
-					line = "{0}\n".format(line)
-
-				obj_temp.write(line)
-
-		obj_temp.seek(0)
-		with open(output, "w") as obj_output:
-			for line in obj_temp:
-				obj_output.write(line)
-
-
 def exec_sp(command, operation = False):
 	""" subprocess で外部プログラムを実行する関数 """
 	if operation:
@@ -84,64 +46,114 @@ def exec_sp(command, operation = False):
 
 def make_prmtop(top, prmtop, strip_mask):
 	""" prmtop を作成する関数 """
-	tempfile_name = ""
+	sys.stderr.write("{start}Creating prmtop ({file}){end}\n".format(file = prmtop, start = basic.color.LRED + basic.color.BOLD, end = basic.color.END))
+
+	command_gmx = check_command("parmed")
 	with tempfile.NamedTemporaryFile(mode = "w", prefix = ".trr2nc_", dir = ".") as obj_temp:
 		tempfile_name = obj_temp.name
+		obj_temp.write("gromber {0}\n".format(top))
+		if strip_mask is not None:
+			obj_temp.write("strip {0}\n".format(strip_mask))
+		obj_temp.write("outparm {0}\n".format(prmtop))
+		obj_temp.flush()
 
-	command_parmed = check_command("parmed")
-	temp_in = tempfile_name + ".in"
-	with open(temp_in, "w") as obj_output:
-		obj_output.write("gromber {0}\n".format(top))
-		obj_output.write("outparm {0}\n".format(prmtop))
-		obj_output.write("quit\n")
-	exec_sp("{0} -n < {1}".format(command_parmed, temp_in))
-	os.remove(temp_in)
+		exec_sp("{0} -n -i {1}".format(command_gmx, tempfile_name))
 
 
-def convert_trajectory(tpr, trr, begin, end, prmtop, strip_mask, fitting_mask, output):
+def make_ndx(top, strip_mask):
+	""" ndx  ファイルを作成する関数 """
+	tempfile_ndx = None
+
+	if strip_mask is not None:
+		with tempfile.NamedTemporaryFile(mode = "w", prefix = ".trr2nc_", dir = ".") as obj_temp:
+			tempfile_name = obj_temp.name
+		tempfile_ndx = tempfile_name + ".ndx"
+		sys.stderr.write("{start}Creating ndx ({file}){end}\n".format(file = tempfile_ndx, start = basic.color.LRED + basic.color.BOLD, end = basic.color.END))
+
+		import parmed, copy
+
+		with open(tempfile_ndx, "w") as obj_output:
+			whole_structure = parmed.load_file(top)
+			obj_output.write("[ System ]\n")
+			whole_idxs = [x.idx for x in whole_structure.atoms]
+			start_pos = 0
+			while start_pos < len(whole_idxs):
+				if start_pos + 3 <= len(whole_idxs):
+					obj_output.write("{0}\n".format(" ".join(map(lambda x : "{0:>4}".format(x + 1), whole_idxs[start_pos : start_pos + 15]))))
+				else:
+					obj_output.write("{0}\n".format(" ".join(map(lambda x : "{0:>4}".format(x + 1), whole_idxs[start_pos : ]))))
+				start_pos += 15
+			obj_output.write("\n")
+
+			strip_structure = copy.deepcopy(whole_structure)
+			strip_structure.strip(strip_mask)
+
+			obj_output.write("[ Strip ]\n")
+			whole_infos = list(zip([x.name for x in whole_structure.atoms], [x.idx for x in whole_structure.atoms]))
+			strip_infos = list(zip([x.name for x in strip_structure.atoms], [x.idx for x in strip_structure.atoms]))
+			idx = 0
+			matched_idxs = []
+			for strip_info in strip_infos:
+				while idx < len(whole_infos):
+					if strip_info[0] == whole_infos[idx][0]:
+						# 原子名が同じ場合
+						matched_idxs.append(whole_infos[idx][1] + 1)
+						break
+					idx += 1
+				idx += 1
+
+			start_pos = 0
+			while start_pos < len(matched_idxs):
+				if start_pos + 3 <= len(matched_idxs):
+					obj_output.write("{0}\n".format(" ".join(map(lambda x : "{0:>4}".format(x), matched_idxs[start_pos : start_pos + 15]))))
+				else:
+					obj_output.write("{0}\n".format(" ".join(map(lambda x : "{0:>4}".format(x), matched_idxs[start_pos : ]))))
+				start_pos += 15
+			obj_output.write("\n")
+
+	return tempfile_ndx
+
+
+def convert_trajectory(top, tpr, trr, ndx, begin, end, prmtop, strip_mask, fitting_mask, output):
+	""" トラジェクトリを trr から nc に変換する関数 """
 	command_gmx = check_command("gmx")
 
 	tempfile_name = ""
 	with tempfile.NamedTemporaryFile(mode = "w", prefix = ".trr2nc_", dir = ".") as obj_temp:
 		tempfile_name = obj_temp.name
 
-	# 周期境界条件でジャンプしないトラジェクトリの作成
-	temp_traj1 = tempfile_name + "1.trr"
+	# 分子を中央に配置したトラジェクトリの作成
+	temp_traj = tempfile_name + ".trr"
+	sys.stderr.write("{start}Creating centered trajectory ({file}){end}\n".format(file = temp_traj, start = basic.color.LRED + basic.color.BOLD, end = basic.color.END))
 	trajectories = " ".join(trr)
-	command = "{0} trjconv -s {1} -f {2} -o {3} -pbc nojump".format(command_gmx, tpr, trajectories, temp_traj1)
+	command = "{0} trjconv -s {1} -f {2} -o {3} -pbc mol -center -ur compact".format(command_gmx, tpr, trajectories, temp_traj)
 	if begin is not None:
 		command += " -b {0}".format(begin)
 	if end is not None:
 		command += " -e {0}".format(end)
-	command += " << 'EOF'\n0\nEOF"
-	exec_sp(command)
-
-	# 特定分子を中央に配置したトラジェクトリの作成
-	temp_traj2 = tempfile_name + "2.trr"
-	exec_sp("{0} trjconv -s {1} -f {2} -o {3} -pbc mol -center -ur compact << 'EOF'\n0\n0\nEOF".format(command_gmx, tpr, temp_traj1, temp_traj2))
-	os.remove(temp_traj1)
+	if strip_mask is not None:
+		command += " -n {0} << 'EOF'\n1\n1\nEOF".format(ndx)
+	else:
+		command += " << 'EOF'\n0\n0\nEOF"
+	exec_sp(command, True)
 
 	# nc ファイルに変換
 	temp_in = tempfile_name + ".in"
+	sys.stderr.write("{start}Converting AMBER trajectory ({file}){end}\n".format(file = output, start = basic.color.LRED + basic.color.BOLD, end = basic.color.END))
 	with open(temp_in, "w") as obj_output:
 		obj_output.write("parm {0}\n".format(prmtop))
-		obj_output.write("trajin {0}\n".format(temp_traj2))
+		obj_output.write("trajin {0}\n".format(temp_traj))
 		if strip_mask is not None:
 			obj_output.write("strip {0}\n".format(strip_mask))
 		if fitting_mask is not None:
 			obj_output.write("rms {0} first mass\n".format(fitting_mask))
 		obj_output.write("trajout {0}\n".format(output))
 		obj_output.write("go\n")
-		if strip_mask is not None:
-			obj_output.write("clear trajin\n")
-			obj_output.write("parmstrip {0}\n".format(strip_mask))
-			obj_output.write("parmwrite out {0}\n".format(prmtop))
-			obj_output.write("go\n")
 
 	command_cpptraj = check_command("cpptraj")
-	exec_sp("{0} -i {1}".format(command_cpptraj, temp_in))
+	exec_sp("{0} -i {1}".format(command_cpptraj, temp_in), True)
 
-	os.remove(temp_traj2)
+	os.remove(temp_traj)
 	os.remove(temp_in)
 
 
@@ -153,11 +165,11 @@ if __name__ == '__main__':
 	parser.add_argument("-x", dest = "trr", metavar = "INPUT.<trr|xtc|gro>", nargs = "+", help = "Gromacs trajectory file")
 	parser.add_argument("-o", dest = "nc", metavar = "OUTPUT.<nc|mdcrd>", required = True, help = "output for Amber trajectory (.nc)")
 	parser.add_argument("-p", dest = "prmtop", metavar = "INPUT.prmtop", required = True, help = "Amber topology file")
+	parser.add_argument("-t", dest = "top", metavar = "INPUT.top", required = True, help = "Gromacs topology file when prmtop does not exist")
 
 	gmx_option = parser.add_argument_group("gromacs option")
 	gmx_option.add_argument("-b", dest = "begin", metavar = "START_TIME", type = int, help = "First frame (ps) to read from trajectory")
 	gmx_option.add_argument("-e", dest = "end", metavar = "END_TIME", type = int, help = "Last frame (ps) to read from trajectory")
-	gmx_option.add_argument("-t", dest = "top", metavar = "INPUT.top", help = "Gromacs topology file when prmtop does not exist")
 
 	cpptraj_option = parser.add_argument_group("cpptraj option")
 	cpptraj_option.add_argument("-mf", dest = "fitting_mask", metavar = "FITTING_MASK", help = "fitting mask for cpptraj")
@@ -171,13 +183,14 @@ if __name__ == '__main__':
 	for trj_file in args.trr:
 		basic.check_exist(trj_file, 2)
 
-	if os.path.exists(args.prmtop) == False:
-		# prmtop がない場合
-		if args.top is None:
-			# 力場ファイルが指定されていない場合
-			sys.stderr.write(" ERROR: -t option is not specified when prmtop does not exist\n")
-			sys.exit(1)
+	if args.flag_overwrite == False:
+		basic.check_overwrite(args.prmtop)
+	if os.path.exists(args.prmtop):
+		os.remove(args.prmtop)
+	make_prmtop(args.top, args.prmtop, args.strip_mask)
+	ndx = make_ndx(args.top, args.strip_mask)
 
-		make_prmtop(args.top, args.prmtop, args.strip_mask)
+	convert_trajectory(args.top, args.tpr, args.trr, ndx, args.begin, args.end, args.prmtop, args.strip_mask, args.fitting_mask, args.nc)
 
-	convert_trajectory(args.tpr, args.trr, args.begin, args.end, args.prmtop, args.strip_mask, args.fitting_mask, args.nc)
+	if args.strip_mask is not None:
+		os.remove(ndx)
