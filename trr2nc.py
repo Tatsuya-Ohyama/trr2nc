@@ -60,23 +60,35 @@ def make_prmtop(top, prmtop, strip_mask):
 		exec_sp("{0} -n -i {1}".format(command_gmx, tempfile_name))
 
 
-def make_ndx(top, strip_mask):
+def make_ndx(top, strip_mask, center_mask):
 	""" ndx  ファイルを作成する関数 """
-	tempfile_ndx = None
+	tempfile_ndx = ""
 
-	if strip_mask is not None:
-		with tempfile.NamedTemporaryFile(mode = "w", prefix = ".trr2nc_", dir = ".") as obj_temp:
-			tempfile_name = obj_temp.name
-		tempfile_ndx = tempfile_name + ".ndx"
-		sys.stderr.write("{start}Creating ndx ({file}){end}\n".format(file = tempfile_ndx, start = basic.color.LRED + basic.color.BOLD, end = basic.color.END))
+	with tempfile.NamedTemporaryFile(mode = "w", prefix = ".trr2nc_", dir = ".") as obj_temp:
+		tempfile_name = obj_temp.name
+	tempfile_ndx = tempfile_name + ".ndx"
+	sys.stderr.write("{start}Creating ndx ({file}){end}\n".format(file = tempfile_ndx, start = basic.color.LRED + basic.color.BOLD, end = basic.color.END))
 
-		import parmed, copy
+	import parmed, copy
 
-		with open(tempfile_ndx, "w") as obj_output:
-			whole_structure = parmed.load_file(top)
-			obj_output.write("[ System ]\n")
-			whole_idxs = [x.idx for x in whole_structure.atoms]
-			start_pos = 0
+	with open(tempfile_ndx, "w") as obj_output:
+		# 全体の ndx の出力
+		obj_output.write("[ System ]\n")
+		whole_structure = parmed.load_file(top)
+		whole_idxs = [x.idx for x in whole_structure.atoms]
+		start_pos = 0
+		while start_pos < len(whole_idxs):
+			if start_pos + 3 <= len(whole_idxs):
+				obj_output.write("{0}\n".format(" ".join(map(lambda x : "{0:>4}".format(x + 1), whole_idxs[start_pos : start_pos + 15]))))
+			else:
+				obj_output.write("{0}\n".format(" ".join(map(lambda x : "{0:>4}".format(x + 1), whole_idxs[start_pos : ]))))
+			start_pos += 15
+		obj_output.write("\n")
+
+		# 中心構造の出力
+		obj_output.write("[ Center ]\n")
+		if center_mask is None:
+			# center_mask が指定されていない場合 (全体と同じ)
 			while start_pos < len(whole_idxs):
 				if start_pos + 3 <= len(whole_idxs):
 					obj_output.write("{0}\n".format(" ".join(map(lambda x : "{0:>4}".format(x + 1), whole_idxs[start_pos : start_pos + 15]))))
@@ -84,11 +96,49 @@ def make_ndx(top, strip_mask):
 					obj_output.write("{0}\n".format(" ".join(map(lambda x : "{0:>4}".format(x + 1), whole_idxs[start_pos : ]))))
 				start_pos += 15
 			obj_output.write("\n")
+		else:
+			# center_mask がある場合
+			center_structure = copy.deepcopy(whole_structure)
+			center_structure.strip("!" + center_mask)
 
+			whole_infos = list(zip([x.name for x in whole_structure.atoms], [x.idx for x in whole_structure.atoms]))
+			center_infos = list(zip([x.name for x in center_structure.atoms], [x.idx for x in center_structure.atoms]))
+			idx = 0
+			matched_idxs = []
+			for center_info in center_infos:
+				while idx < len(whole_infos):
+					if center_info[0] == whole_infos[idx][0]:
+						# 原子名が同じ場合
+						matched_idxs.append(whole_infos[idx][1] + 1)
+						break
+					idx += 1
+				idx += 1
+
+			start_pos = 0
+			while start_pos < len(matched_idxs):
+				if start_pos + 3 <= len(matched_idxs):
+					obj_output.write("{0}\n".format(" ".join(map(lambda x : "{0:>4}".format(x), matched_idxs[start_pos : start_pos + 15]))))
+				else:
+					obj_output.write("{0}\n".format(" ".join(map(lambda x : "{0:>4}".format(x), matched_idxs[start_pos : ]))))
+				start_pos += 15
+			obj_output.write("\n")
+
+		# strip 構造の出力
+		obj_output.write("[ Strip ]\n")
+		if strip_mask is None:
+			# strip_mask が指定されていない場合 (全体と同じ)
+			while start_pos < len(whole_idxs):
+				if start_pos + 3 <= len(whole_idxs):
+					obj_output.write("{0}\n".format(" ".join(map(lambda x : "{0:>4}".format(x + 1), whole_idxs[start_pos : start_pos + 15]))))
+				else:
+					obj_output.write("{0}\n".format(" ".join(map(lambda x : "{0:>4}".format(x + 1), whole_idxs[start_pos : ]))))
+				start_pos += 15
+			obj_output.write("\n")
+		else:
+			# strip_mask がある場合
 			strip_structure = copy.deepcopy(whole_structure)
 			strip_structure.strip(strip_mask)
 
-			obj_output.write("[ Strip ]\n")
 			whole_infos = list(zip([x.name for x in whole_structure.atoms], [x.idx for x in whole_structure.atoms]))
 			strip_infos = list(zip([x.name for x in strip_structure.atoms], [x.idx for x in strip_structure.atoms]))
 			idx = 0
@@ -131,10 +181,7 @@ def convert_trajectory(top, tpr, trr, ndx, begin, end, prmtop, strip_mask, fitti
 		command += " -b {0}".format(begin)
 	if end is not None:
 		command += " -e {0}".format(end)
-	if strip_mask is not None:
-		command += " -n {0} << 'EOF'\n1\n1\nEOF".format(ndx)
-	else:
-		command += " << 'EOF'\n0\n0\nEOF"
+	command += " -n {0} << 'EOF'\n1\n2\nEOF".format(ndx)
 	exec_sp(command, True)
 
 	# nc ファイルに変換
@@ -172,8 +219,9 @@ if __name__ == '__main__':
 	gmx_option.add_argument("-e", dest = "end", metavar = "END_TIME", type = int, help = "Last frame (ps) to read from trajectory")
 
 	cpptraj_option = parser.add_argument_group("cpptraj option")
-	cpptraj_option.add_argument("-mf", dest = "fitting_mask", metavar = "FITTING_MASK", help = "fitting mask for cpptraj")
+	cpptraj_option.add_argument("-mc", dest = "center_mask", metavar = "CENTER_MASK", help = "center mask for cpptraj")
 	cpptraj_option.add_argument("-ms", dest = "strip_mask", metavar = "STRIP_MASK", help = "strip mask for cpptraj")
+	cpptraj_option.add_argument("-mf", dest = "fitting_mask", metavar = "FITTING_MASK", help = "fitting mask for cpptraj")
 
 	parser.add_argument("-O", dest = "flag_overwrite", action = "store_true", default = False, help = "overwrite forcibly")
 
@@ -188,7 +236,7 @@ if __name__ == '__main__':
 	if os.path.exists(args.prmtop):
 		os.remove(args.prmtop)
 	make_prmtop(args.top, args.prmtop, args.strip_mask)
-	ndx = make_ndx(args.top, args.strip_mask)
+	ndx = make_ndx(args.top, args.strip_mask, args.center_mask)
 
 	convert_trajectory(args.top, args.tpr, args.trr, ndx, args.begin, args.end, args.prmtop, args.strip_mask, args.fitting_mask, args.nc)
 
