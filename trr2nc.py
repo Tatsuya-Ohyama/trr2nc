@@ -209,7 +209,7 @@ if __name__ == '__main__':
 	parser = argparse.ArgumentParser(description = "trr2nc.py - Convert trr to nc with treating PBC", formatter_class=argparse.RawTextHelpFormatter)
 
 	parser.add_argument("-s", dest = "tpr", metavar = "INPUT.tpr", required = True, help = "Gromacs run input file")
-	parser.add_argument("-x", dest = "trr", metavar = "INPUT.<trr|xtc|gro>", nargs = "+", help = "Gromacs trajectory file")
+	parser.add_argument("-x", dest = "trr", metavar = "INPUT.<trr|xtc|gro>", required = True, nargs = "+", help = "Gromacs trajectory file")
 	parser.add_argument("-o", dest = "nc", metavar = "OUTPUT.<nc|mdcrd>", required = True, help = "output for Amber trajectory (.nc)")
 	parser.add_argument("-p", dest = "prmtop", metavar = "INPUT.prmtop", required = True, help = "Amber topology file")
 	parser.add_argument("-t", dest = "top", metavar = "INPUT.top", required = True, help = "Gromacs topology file when prmtop does not exist")
@@ -230,6 +230,7 @@ if __name__ == '__main__':
 	basic.check_exist(args.tpr, 2)
 	for trj_file in args.trr:
 		basic.check_exist(trj_file, 2)
+	basic.check_exist(args.top, 2)
 
 	if args.flag_overwrite == False:
 		basic.check_overwrite(args.prmtop)
