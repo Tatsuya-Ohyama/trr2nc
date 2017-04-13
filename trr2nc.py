@@ -176,7 +176,7 @@ def convert_trajectory(top, tpr, trr, ndx, begin, end, prmtop, strip_mask, fitti
 	temp_traj = tempfile_name + ".trr"
 	sys.stderr.write("{start}Creating centered trajectory ({file}){end}\n".format(file = temp_traj, start = basic.color.LRED + basic.color.BOLD, end = basic.color.END))
 	trajectories = " ".join(trr)
-	command = "{0} trjconv -s {1} -f {2} -o {3} -pbc mol -center -ur compact".format(command_gmx, tpr, trajectories, temp_traj)
+	command = "{0} trjconv -s {1} -f {2} -o {3} -pbc res -center -ur compact".format(command_gmx, tpr, trajectories, temp_traj)
 	if begin is not None:
 		command += " -b {0}".format(begin)
 	if end is not None:
