@@ -49,7 +49,7 @@ def make_prmtop(top, prmtop, strip_mask):
 	sys.stderr.write("{start}Creating prmtop ({file}){end}\n".format(file = prmtop, start = basic.color.LRED + basic.color.BOLD, end = basic.color.END))
 
 	command_gmx = check_command("parmed")
-	with tempfile.NamedTemporaryFile(mode = "w", prefix = ".trr2nc_", dir = ".") as obj_temp:
+	with tempfile.NamedTemporaryFile(mode = "w", prefix = ".trr2nc_", dir = args.temp_dir) as obj_temp:
 		tempfile_name = obj_temp.name
 		obj_temp.write("gromber {0}\n".format(top))
 		if strip_mask is not None:
@@ -64,7 +64,7 @@ def make_ndx(top, strip_mask, center_mask):
 	""" ndx  ファイルを作成する関数 """
 	tempfile_ndx = ""
 
-	with tempfile.NamedTemporaryFile(mode = "w", prefix = ".trr2nc_", dir = ".") as obj_temp:
+	with tempfile.NamedTemporaryFile(mode = "w", prefix = ".trr2nc_", dir = args.temp_dir) as obj_temp:
 		tempfile_name = obj_temp.name
 	tempfile_ndx = tempfile_name + ".ndx"
 	sys.stderr.write("{start}Creating ndx ({file}){end}\n".format(file = tempfile_ndx, start = basic.color.LRED + basic.color.BOLD, end = basic.color.END))
@@ -169,7 +169,7 @@ def convert_trajectory(top, tpr, trr, ndx, begin, end, prmtop, strip_mask, fitti
 	command_gmx = check_command("gmx")
 
 	tempfile_name = ""
-	with tempfile.NamedTemporaryFile(mode = "w", prefix = ".trr2nc_", dir = ".") as obj_temp:
+	with tempfile.NamedTemporaryFile(mode = "w", prefix = ".trr2nc_", dir = args.temp_dir) as obj_temp:
 		tempfile_name = obj_temp.name
 
 	# 周期境界でジャンプしないトラジェクトリの作成
@@ -195,6 +195,7 @@ def convert_trajectory(top, tpr, trr, ndx, begin, end, prmtop, strip_mask, fitti
 		command += " -e {0}".format(end)
 	command += " -n {0} << 'EOF'\n1\n2\nEOF".format(ndx)
 	exec_sp(command, True)
+	os.remove(temp_traj1)
 
 	# nc ファイルに変換
 	temp_in = tempfile_name + ".in"
@@ -212,7 +213,6 @@ def convert_trajectory(top, tpr, trr, ndx, begin, end, prmtop, strip_mask, fitti
 	command_cpptraj = check_command("cpptraj")
 	exec_sp("{0} -i {1}".format(command_cpptraj, temp_in), True)
 
-	os.remove(temp_traj1)
 	os.remove(temp_traj2)
 	os.remove(temp_in)
 
@@ -226,6 +226,7 @@ if __name__ == '__main__':
 	parser.add_argument("-o", dest = "nc", metavar = "OUTPUT.<nc|mdcrd>", required = True, help = "output for Amber trajectory (.nc)")
 	parser.add_argument("-p", dest = "prmtop", metavar = "INPUT.prmtop", required = True, help = "Amber topology file")
 	parser.add_argument("-t", dest = "top", metavar = "INPUT.top", required = True, help = "Gromacs topology file when prmtop does not exist")
+	parser.add_argument("-sc", dest = "temp_dir", metavar = "TEMP_DIR", default = ".", help = "temporary directory (Default: current dir)")
 
 	gmx_option = parser.add_argument_group("gromacs option")
 	gmx_option.add_argument("-b", dest = "begin", metavar = "START_TIME", type = int, help = "First frame (ps) to read from trajectory")
