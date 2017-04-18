@@ -172,11 +172,23 @@ def convert_trajectory(top, tpr, trr, ndx, begin, end, prmtop, strip_mask, fitti
 	with tempfile.NamedTemporaryFile(mode = "w", prefix = ".trr2nc_", dir = ".") as obj_temp:
 		tempfile_name = obj_temp.name
 
-	# 分子を中央に配置したトラジェクトリの作成
-	temp_traj = tempfile_name + ".trr"
-	sys.stderr.write("{start}Creating centered trajectory ({file}){end}\n".format(file = temp_traj, start = basic.color.LRED + basic.color.BOLD, end = basic.color.END))
+	# 周期境界でジャンプしないトラジェクトリの作成
+	temp_traj1 = tempfile_name + "1.trr"
+	sys.stderr.write("{start}Creating nojump trajectory ({file}){end}\n".format(file = temp_traj1, start = basic.color.LRED + basic.color.BOLD, end = basic.color.END))
 	trajectories = " ".join(trr)
-	command = "{0} trjconv -s {1} -f {2} -o {3} -pbc res -center -ur compact".format(command_gmx, tpr, trajectories, temp_traj)
+	command = "{command} trjconv -s {tpr} -f {trajectory} -o {output} -pbc nojump -center".format(command = command_gmx, tpr = tpr, trajectory = trajectories, output = temp_traj1)
+	if begin is not None:
+		command += " -b {0}".format(begin)
+	if end is not None:
+		command += " -e {0}".format(end)
+	command += " -n {0} << 'EOF'\n1\n2\nEOF".format(ndx)
+	exec_sp(command, True)
+
+	# 分子を中央に配置したトラジェクトリの作成
+	temp_traj2 = tempfile_name + "2.trr"
+	sys.stderr.write("{start}Creating centered trajectory ({file}){end}\n".format(file = temp_traj2, start = basic.color.LRED + basic.color.BOLD, end = basic.color.END))
+	trajectories = " ".join(trr)
+	command = "{command} trjconv -s {tpr} -f {trajectory} -o {output} -pbc mol -center -ur compact".format(command = command_gmx, tpr = tpr, trajectory = trajectories, output = temp_traj2)
 	if begin is not None:
 		command += " -b {0}".format(begin)
 	if end is not None:
@@ -189,7 +201,7 @@ def convert_trajectory(top, tpr, trr, ndx, begin, end, prmtop, strip_mask, fitti
 	sys.stderr.write("{start}Converting AMBER trajectory ({file}){end}\n".format(file = output, start = basic.color.LRED + basic.color.BOLD, end = basic.color.END))
 	with open(temp_in, "w") as obj_output:
 		obj_output.write("parm {0}\n".format(prmtop))
-		obj_output.write("trajin {0}\n".format(temp_traj))
+		obj_output.write("trajin {0}\n".format(temp_traj2))
 		if strip_mask is not None:
 			obj_output.write("strip {0}\n".format(strip_mask))
 		if fitting_mask is not None:
@@ -200,7 +212,8 @@ def convert_trajectory(top, tpr, trr, ndx, begin, end, prmtop, strip_mask, fitti
 	command_cpptraj = check_command("cpptraj")
 	exec_sp("{0} -i {1}".format(command_cpptraj, temp_in), True)
 
-	os.remove(temp_traj)
+	os.remove(temp_traj1)
+	os.remove(temp_traj2)
 	os.remove(temp_in)
 
 
