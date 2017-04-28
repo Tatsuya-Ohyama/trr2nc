@@ -74,9 +74,9 @@ def make_ndx(top, strip_mask, center_mask):
 	with open(tempfile_ndx, "w") as obj_output:
 		# 全体の ndx の出力
 		obj_output.write("[ System ]\n")
+		start_pos = 0
 		whole_structure = parmed.load_file(top)
 		whole_idxs = [x.idx for x in whole_structure.atoms]
-		start_pos = 0
 		while start_pos < len(whole_idxs):
 			if start_pos + 3 <= len(whole_idxs):
 				obj_output.write("{0}\n".format(" ".join(map(lambda x : "{0:>4}".format(x + 1), whole_idxs[start_pos : start_pos + 15]))))
@@ -87,6 +87,7 @@ def make_ndx(top, strip_mask, center_mask):
 
 		# 中心構造の出力
 		obj_output.write("[ Center ]\n")
+		start_pos = 0
 		if center_mask is None:
 			# center_mask が指定されていない場合 (全体と同じ)
 			while start_pos < len(whole_idxs):
@@ -125,8 +126,10 @@ def make_ndx(top, strip_mask, center_mask):
 
 		# strip 構造の出力
 		obj_output.write("[ Strip ]\n")
+		start_pos = 0
 		if strip_mask is None:
 			# strip_mask が指定されていない場合 (全体と同じ)
+			start_pos = 0
 			while start_pos < len(whole_idxs):
 				if start_pos + 3 <= len(whole_idxs):
 					obj_output.write("{0}\n".format(" ".join(map(lambda x : "{0:>4}".format(x + 1), whole_idxs[start_pos : start_pos + 15]))))
@@ -152,7 +155,6 @@ def make_ndx(top, strip_mask, center_mask):
 					idx += 1
 				idx += 1
 
-			start_pos = 0
 			while start_pos < len(matched_idxs):
 				if start_pos + 3 <= len(matched_idxs):
 					obj_output.write("{0}\n".format(" ".join(map(lambda x : "{0:>4}".format(x), matched_idxs[start_pos : start_pos + 15]))))
