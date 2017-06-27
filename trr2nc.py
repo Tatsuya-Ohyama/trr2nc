@@ -48,16 +48,12 @@ def make_prmtop(top, prmtop, strip_mask):
 	""" prmtop を作成する関数 """
 	sys.stderr.write("{start}Creating prmtop ({file}){end}\n".format(file = prmtop, start = basic.color.LRED + basic.color.BOLD, end = basic.color.END))
 
-	command_gmx = check_command("parmed")
-	with tempfile.NamedTemporaryFile(mode = "w", prefix = ".trr2nc_", dir = args.temp_dir) as obj_temp:
-		tempfile_name = obj_temp.name
-		obj_temp.write("gromber {0}\n".format(top))
-		if strip_mask is not None:
-			obj_temp.write("strip {0}\n".format(strip_mask))
-		obj_temp.write("outparm {0}\n".format(prmtop))
-		obj_temp.flush()
-
-		exec_sp("{0} -n -i {1}".format(command_gmx, tempfile_name))
+	import parmed
+	gromacs_top = parmed.gromacs.GromacsTopologyFile(top)
+	if strip_mask is not None:
+		gromacs_top.strip(strip_mask)
+	amber_top = parmed.amber.AmberParm.from_structure(gromacs_top)
+	amber_top.write_parm(prmtop)
 
 
 def make_ndx(top, strip_mask, center_mask):
@@ -75,7 +71,7 @@ def make_ndx(top, strip_mask, center_mask):
 		# 全体の ndx の出力
 		obj_output.write("[ System ]\n")
 		start_pos = 0
-		whole_structure = parmed.load_file(top)
+		whole_structure = parmed.gromacs.GromacsTopologyFile(top)
 		whole_idxs = [x.idx for x in whole_structure.atoms]
 		while start_pos < len(whole_idxs):
 			if start_pos + 3 <= len(whole_idxs):
