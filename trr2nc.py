@@ -15,6 +15,7 @@ import tempfile
 
 sys.path.append(os.path.join(os.path.dirname(os.path.realpath(sys.argv[0])), "modules"))
 from py_module_basic import basic
+import parmed
 
 # =============== functions =============== #
 def check_command(command_name):
@@ -48,7 +49,6 @@ def make_prmtop(top, prmtop, strip_mask):
 	""" prmtop を作成する関数 """
 	sys.stderr.write("{start}Creating prmtop ({file}){end}\n".format(file = prmtop, start = basic.color.LRED + basic.color.BOLD, end = basic.color.END))
 
-	import parmed
 	gromacs_top = parmed.gromacs.GromacsTopologyFile(top)
 	if strip_mask is not None:
 		gromacs_top.strip(strip_mask)
@@ -184,18 +184,36 @@ def convert_trajectory(top, tpr, trr, ndx, begin, end, prmtop, strip_mask, outpu
 
 	# strip_mask が指定されていた場合
 	if strip_mask is not None:
-		output_tpr = tempfile_name + ".tpr"
-		ref_coord = tempfile_name + "_ref.trr"
-		sys.stderr.write("{start}Creating stripped reference coordinate file ({file})\n{end}".format(file = tpr, start = basic.color.LRED + basic.color.BOLD, end = basic.color.END))
-		command = "{command} trjconv -s {input_tpr} -f {trajectory} -o {ref_coord} -n {ndx} -b 1 -e 1 << 'EOF'\n0\nEOF".format(command = command_gmx, trajectory = trajectories, input_tpr = tpr, ndx = ndx, ref_coord = ref_coord)
-		exec_sp(command, False)
-
 		sys.stderr.write("{start}Creating stripped tpr file ({file})\n{end}".format(file = tpr, start = basic.color.LRED + basic.color.BOLD, end = basic.color.END))
-		command = "{command} convert-tpr -s {input_tpr} -f {ref_coord} -o {output_tpr} -n {ndx} -nsteps -1 << 'EOF'\n2\nEOF".format(command = command_gmx, input_tpr = tpr, output_tpr = output_tpr, ref_coord = ref_coord, ndx = ndx)
+
+		# grompp 用の構造ファイルの作成
+		ref_coord = tempfile_name + "_ref.gro"
+		command = "{command} trjconv -s {input_tpr} -f {trajectory} -o {ref_coord} -n {ndx} -b 1 -e 1 << 'EOF'\n2\nEOF".format(command = command_gmx, trajectory = trajectories, input_tpr = tpr, ndx = ndx, ref_coord = ref_coord)
 		exec_sp(command, False)
 
-		tpr = output_tpr
+		# strip したトポロジーの作成
+		temp_top = tempfile_name + ".top"
+		obj_top = parmed.gromacs.GromacsTopologyFile(top)
+		obj_top.strip(strip_mask)
+		obj_top.write(temp_top)
+
+		# grompp 用の mdp ファイルの作成
+		temp_mdp1 = tempfile_name + "1.mdp"
+		temp_mdp2 = tempfile_name + "2.mdp"
+		with open(temp_mdp1, "w") as obj_output:
+			obj_output.write("integrator = steep\n emtol = 1000.0\n emstep = 0.01\n nsteps = 50000\n nstlist = 100\n ns_type = grid\n rlist = 1.0\n coulombtype = PME\n rcoulomb = 1.0\n nstlog = 1 \n pbc = xyz\n vdwtype = cut-off\n constraints = none\n cutoff-scheme = Verlet\n")
+
+		# tpr の作成
+		temp_tpr = tempfile_name + ".tpr"
+		command = "{command} grompp -f {temp_mdp1} -c {ref_coord} -p {temp_top} -o {temp_tpr} -po {temp_mdp2}".format(command = command_gmx, temp_mdp1 = temp_mdp1, ref_coord = ref_coord, temp_top = temp_top, temp_tpr = temp_tpr, temp_mdp2 = temp_mdp2)
+		exec_sp(command, False)
+
+		# 後処理
+		tpr = temp_tpr
 		os.remove(ref_coord)
+		os.remove(temp_top)
+		os.remove(temp_mdp1)
+		os.remove(temp_mdp2)
 
 	# 分子を中央に配置したトラジェクトリの作成
 	temp_traj2 = tempfile_name + "2.trr"
