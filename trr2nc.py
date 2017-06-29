@@ -15,6 +15,7 @@ import tempfile
 
 sys.path.append(os.path.join(os.path.dirname(os.path.realpath(sys.argv[0])), "modules"))
 from py_module_basic import basic
+import parmed
 
 # =============== functions =============== #
 def check_command(command_name):
@@ -48,7 +49,6 @@ def make_prmtop(top, prmtop, strip_mask):
 	""" prmtop を作成する関数 """
 	sys.stderr.write("{start}Creating prmtop ({file}){end}\n".format(file = prmtop, start = basic.color.LRED + basic.color.BOLD, end = basic.color.END))
 
-	import parmed
 	gromacs_top = parmed.gromacs.GromacsTopologyFile(top)
 	if strip_mask is not None:
 		gromacs_top.strip(strip_mask)
@@ -162,7 +162,7 @@ def make_ndx(top, strip_mask, center_mask):
 	return tempfile_ndx
 
 
-def convert_trajectory(top, tpr, trr, ndx, begin, end, prmtop, strip_mask, fitting_mask, output):
+def convert_trajectory(top, tpr, trr, ndx, begin, end, prmtop, strip_mask, output):
 	""" トラジェクトリを trr から nc に変換する関数 """
 	command_gmx = check_command("gmx")
 
@@ -182,18 +182,53 @@ def convert_trajectory(top, tpr, trr, ndx, begin, end, prmtop, strip_mask, fitti
 	command += " -n {0} << 'EOF'\n1\n2\nEOF".format(ndx)
 	exec_sp(command, True)
 
+	# strip_mask が指定されていた場合
+	if strip_mask is not None:
+		sys.stderr.write("{start}Creating stripped tpr file ({file})\n{end}".format(file = tpr, start = basic.color.LRED + basic.color.BOLD, end = basic.color.END))
+
+		# grompp 用の構造ファイルの作成
+		ref_coord = tempfile_name + "_ref.gro"
+		command = "{command} trjconv -s {input_tpr} -f {trajectory} -o {ref_coord} -n {ndx} -b 1 -e 1 << 'EOF'\n2\nEOF".format(command = command_gmx, trajectory = trajectories, input_tpr = tpr, ndx = ndx, ref_coord = ref_coord)
+		exec_sp(command, False)
+
+		# strip したトポロジーの作成
+		temp_top = tempfile_name + ".top"
+		obj_top = parmed.gromacs.GromacsTopologyFile(top)
+		obj_top.strip(strip_mask)
+		obj_top.write(temp_top)
+
+		# grompp 用の mdp ファイルの作成
+		temp_mdp1 = tempfile_name + "1.mdp"
+		temp_mdp2 = tempfile_name + "2.mdp"
+		with open(temp_mdp1, "w") as obj_output:
+			obj_output.write("integrator = steep\n emtol = 1000.0\n emstep = 0.01\n nsteps = 50000\n nstlist = 100\n ns_type = grid\n rlist = 1.0\n coulombtype = PME\n rcoulomb = 1.0\n nstlog = 1 \n pbc = xyz\n vdwtype = cut-off\n constraints = none\n cutoff-scheme = Verlet\n")
+
+		# tpr の作成
+		temp_tpr = tempfile_name + ".tpr"
+		command = "{command} grompp -f {temp_mdp1} -c {ref_coord} -p {temp_top} -o {temp_tpr} -po {temp_mdp2}".format(command = command_gmx, temp_mdp1 = temp_mdp1, ref_coord = ref_coord, temp_top = temp_top, temp_tpr = temp_tpr, temp_mdp2 = temp_mdp2)
+		exec_sp(command, False)
+
+		# 後処理
+		tpr = temp_tpr
+		os.remove(ref_coord)
+		os.remove(temp_top)
+		os.remove(temp_mdp1)
+		os.remove(temp_mdp2)
+
 	# 分子を中央に配置したトラジェクトリの作成
 	temp_traj2 = tempfile_name + "2.trr"
 	sys.stderr.write("{start}Creating centered trajectory ({file}){end}\n".format(file = temp_traj2, start = basic.color.LRED + basic.color.BOLD, end = basic.color.END))
 	trajectories = " ".join(trr)
-	command = "{command} trjconv -s {tpr} -f {trajectory} -o {output} -pbc mol -center -ur compact".format(command = command_gmx, tpr = tpr, trajectory = trajectories, output = temp_traj2)
+	command = "{command} trjconv -s {tpr} -f {trajectory} -o {output} -pbc res -center -ur compact".format(command = command_gmx, tpr = tpr, trajectory = temp_traj1, output = temp_traj2)
 	if begin is not None:
 		command += " -b {0}".format(begin)
 	if end is not None:
 		command += " -e {0}".format(end)
-	command += " -n {0} << 'EOF'\n1\n2\nEOF".format(ndx)
+	command += " << 'EOF'\n1\n0\nEOF"
 	exec_sp(command, True)
 	os.remove(temp_traj1)
+	if strip_mask is not None:
+		os.remove(tpr)
 
 	# nc ファイルに変換
 	temp_in = tempfile_name + ".in"
@@ -201,10 +236,6 @@ def convert_trajectory(top, tpr, trr, ndx, begin, end, prmtop, strip_mask, fitti
 	with open(temp_in, "w") as obj_output:
 		obj_output.write("parm {0}\n".format(prmtop))
 		obj_output.write("trajin {0}\n".format(temp_traj2))
-		if strip_mask is not None:
-			obj_output.write("strip {0}\n".format(strip_mask))
-		if fitting_mask is not None:
-			obj_output.write("rms {0} first mass\n".format(fitting_mask))
 		obj_output.write("trajout {0}\n".format(output))
 		obj_output.write("go\n")
 
@@ -233,7 +264,6 @@ if __name__ == '__main__':
 	cpptraj_option = parser.add_argument_group("cpptraj option")
 	cpptraj_option.add_argument("-mc", dest = "center_mask", metavar = "CENTER_MASK", help = "center mask for cpptraj")
 	cpptraj_option.add_argument("-ms", dest = "strip_mask", metavar = "STRIP_MASK", help = "strip mask for cpptraj")
-	cpptraj_option.add_argument("-mf", dest = "fitting_mask", metavar = "FITTING_MASK", help = "fitting mask for cpptraj")
 
 	parser.add_argument("-O", dest = "flag_overwrite", action = "store_true", default = False, help = "overwrite forcibly")
 
@@ -251,7 +281,7 @@ if __name__ == '__main__':
 	make_prmtop(args.top, args.prmtop, args.strip_mask)
 	ndx = make_ndx(args.top, args.strip_mask, args.center_mask)
 
-	convert_trajectory(args.top, args.tpr, args.trr, ndx, args.begin, args.end, args.prmtop, args.strip_mask, args.fitting_mask, args.nc)
+	convert_trajectory(args.top, args.tpr, args.trr, ndx, args.begin, args.end, args.prmtop, args.strip_mask, args.nc)
 
 	if args.strip_mask is not None:
 		os.remove(ndx)
