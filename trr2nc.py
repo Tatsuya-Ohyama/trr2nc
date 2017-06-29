@@ -162,7 +162,7 @@ def make_ndx(top, strip_mask, center_mask):
 	return tempfile_ndx
 
 
-def convert_trajectory(top, tpr, trr, ndx, begin, end, prmtop, strip_mask, fitting_mask, output):
+def convert_trajectory(top, tpr, trr, ndx, begin, end, prmtop, strip_mask, output):
 	""" トラジェクトリを trr から nc に変換する関数 """
 	command_gmx = check_command("gmx")
 
@@ -182,18 +182,35 @@ def convert_trajectory(top, tpr, trr, ndx, begin, end, prmtop, strip_mask, fitti
 	command += " -n {0} << 'EOF'\n1\n2\nEOF".format(ndx)
 	exec_sp(command, True)
 
+	# strip_mask が指定されていた場合
+	if strip_mask is not None:
+		output_tpr = tempfile_name + ".tpr"
+		ref_coord = tempfile_name + "_ref.trr"
+		sys.stderr.write("{start}Creating stripped reference coordinate file ({file})\n{end}".format(file = tpr, start = basic.color.LRED + basic.color.BOLD, end = basic.color.END))
+		command = "{command} trjconv -s {input_tpr} -f {trajectory} -o {ref_coord} -n {ndx} -b 1 -e 1 << 'EOF'\n0\nEOF".format(command = command_gmx, trajectory = trajectories, input_tpr = tpr, ndx = ndx, ref_coord = ref_coord)
+		exec_sp(command, False)
+
+		sys.stderr.write("{start}Creating stripped tpr file ({file})\n{end}".format(file = tpr, start = basic.color.LRED + basic.color.BOLD, end = basic.color.END))
+		command = "{command} convert-tpr -s {input_tpr} -f {ref_coord} -o {output_tpr} -n {ndx} -nsteps -1 << 'EOF'\n2\nEOF".format(command = command_gmx, input_tpr = tpr, output_tpr = output_tpr, ref_coord = ref_coord, ndx = ndx)
+		exec_sp(command, False)
+
+		tpr = output_tpr
+		os.remove(ref_coord)
+
 	# 分子を中央に配置したトラジェクトリの作成
 	temp_traj2 = tempfile_name + "2.trr"
 	sys.stderr.write("{start}Creating centered trajectory ({file}){end}\n".format(file = temp_traj2, start = basic.color.LRED + basic.color.BOLD, end = basic.color.END))
 	trajectories = " ".join(trr)
-	command = "{command} trjconv -s {tpr} -f {trajectory} -o {output} -pbc mol -center -ur compact".format(command = command_gmx, tpr = tpr, trajectory = trajectories, output = temp_traj2)
+	command = "{command} trjconv -s {tpr} -f {trajectory} -o {output} -pbc res -center -ur compact".format(command = command_gmx, tpr = tpr, trajectory = temp_traj1, output = temp_traj2)
 	if begin is not None:
 		command += " -b {0}".format(begin)
 	if end is not None:
 		command += " -e {0}".format(end)
-	command += " -n {0} << 'EOF'\n1\n2\nEOF".format(ndx)
+	command += " << 'EOF'\n1\n0\nEOF"
 	exec_sp(command, True)
 	os.remove(temp_traj1)
+	if strip_mask is not None:
+		os.remove(tpr)
 
 	# nc ファイルに変換
 	temp_in = tempfile_name + ".in"
@@ -201,10 +218,6 @@ def convert_trajectory(top, tpr, trr, ndx, begin, end, prmtop, strip_mask, fitti
 	with open(temp_in, "w") as obj_output:
 		obj_output.write("parm {0}\n".format(prmtop))
 		obj_output.write("trajin {0}\n".format(temp_traj2))
-		if strip_mask is not None:
-			obj_output.write("strip {0}\n".format(strip_mask))
-		if fitting_mask is not None:
-			obj_output.write("rms {0} first mass\n".format(fitting_mask))
 		obj_output.write("trajout {0}\n".format(output))
 		obj_output.write("go\n")
 
@@ -233,7 +246,6 @@ if __name__ == '__main__':
 	cpptraj_option = parser.add_argument_group("cpptraj option")
 	cpptraj_option.add_argument("-mc", dest = "center_mask", metavar = "CENTER_MASK", help = "center mask for cpptraj")
 	cpptraj_option.add_argument("-ms", dest = "strip_mask", metavar = "STRIP_MASK", help = "strip mask for cpptraj")
-	cpptraj_option.add_argument("-mf", dest = "fitting_mask", metavar = "FITTING_MASK", help = "fitting mask for cpptraj")
 
 	parser.add_argument("-O", dest = "flag_overwrite", action = "store_true", default = False, help = "overwrite forcibly")
 
@@ -251,7 +263,7 @@ if __name__ == '__main__':
 	make_prmtop(args.top, args.prmtop, args.strip_mask)
 	ndx = make_ndx(args.top, args.strip_mask, args.center_mask)
 
-	convert_trajectory(args.top, args.tpr, args.trr, ndx, args.begin, args.end, args.prmtop, args.strip_mask, args.fitting_mask, args.nc)
+	convert_trajectory(args.top, args.tpr, args.trr, ndx, args.begin, args.end, args.prmtop, args.strip_mask, args.nc)
 
 	if args.strip_mask is not None:
 		os.remove(ndx)
