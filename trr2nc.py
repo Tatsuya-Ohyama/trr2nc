@@ -65,99 +65,110 @@ def make_ndx(top, strip_mask, center_mask):
 	tempfile_ndx = tempfile_name + ".ndx"
 	sys.stderr.write("{start}Creating ndx ({file}){end}\n".format(file = tempfile_ndx, start = basic.color.LRED + basic.color.BOLD, end = basic.color.END))
 
-	import parmed, copy
+	import copy
 
 	with open(tempfile_ndx, "w") as obj_output:
 		# 全体の ndx の出力
 		obj_output.write("[ System ]\n")
-		start_pos = 0
 		whole_structure = parmed.gromacs.GromacsTopologyFile(top)
-		whole_idxs = [x.idx for x in whole_structure.atoms]
-		while start_pos < len(whole_idxs):
-			if start_pos + 3 <= len(whole_idxs):
-				obj_output.write("{0}\n".format(" ".join(map(lambda x : "{0:>4}".format(x + 1), whole_idxs[start_pos : start_pos + 15]))))
+
+		line_elem = 0
+		for atom_idx in [x.idx for x in whole_structure.atoms]:
+			line_elem += 1
+			if line_elem == 1:
+				obj_output.write("{0:>5}".format(atom_idx + 1))
 			else:
-				obj_output.write("{0}\n".format(" ".join(map(lambda x : "{0:>4}".format(x + 1), whole_idxs[start_pos : ]))))
-			start_pos += 15
+				obj_output.write(" {0:>5}".format(atom_idx + 1))
+
+			if line_elem % 15 == 0:
+				line_elem = 0
+				obj_output.write("\n")
+
+		if line_elem % 15 != 0:
+			line_elem = 0
+			obj_output.write("\n")
+
 		obj_output.write("\n")
 
 		# 中心構造の出力
 		obj_output.write("[ Center ]\n")
-		start_pos = 0
 		if center_mask is None:
 			# center_mask が指定されていない場合 (全体と同じ)
-			while start_pos < len(whole_idxs):
-				if start_pos + 3 <= len(whole_idxs):
-					obj_output.write("{0}\n".format(" ".join(map(lambda x : "{0:>4}".format(x + 1), whole_idxs[start_pos : start_pos + 15]))))
+			line_elem = 0
+			for atom_idx in [x.idx for x in whole_structure.atoms]:
+				line_elem += 1
+				if line_elem == 1:
+					obj_output.write("{0:>5}".format(atom_idx + 1))
 				else:
-					obj_output.write("{0}\n".format(" ".join(map(lambda x : "{0:>4}".format(x + 1), whole_idxs[start_pos : ]))))
-				start_pos += 15
-			obj_output.write("\n")
+					obj_output.write(" {0:>5}".format(atom_idx + 1))
+
+				if line_elem % 15 == 0:
+					line_elem = 0
+					obj_output.write("\n")
+
+			if line_elem % 15 != 0:
+				line_elem = 0
+				obj_output.write("\n")
+
 		else:
 			# center_mask がある場合
-			center_structure = copy.deepcopy(whole_structure)
-			center_structure.strip("!" + center_mask)
-
-			whole_infos = list(zip([x.name for x in whole_structure.atoms], [x.idx for x in whole_structure.atoms]))
-			center_infos = list(zip([x.name for x in center_structure.atoms], [x.idx for x in center_structure.atoms]))
-			idx = 0
-			matched_idxs = []
-			for center_info in center_infos:
-				while idx < len(whole_infos):
-					if center_info[0] == whole_infos[idx][0]:
-						# 原子名が同じ場合
-						matched_idxs.append(whole_infos[idx][1] + 1)
-						break
-					idx += 1
-				idx += 1
-
-			start_pos = 0
-			while start_pos < len(matched_idxs):
-				if start_pos + 3 <= len(matched_idxs):
-					obj_output.write("{0}\n".format(" ".join(map(lambda x : "{0:>4}".format(x), matched_idxs[start_pos : start_pos + 15]))))
+			line_elem = 0
+			for atom_idx in parmed.amber.AmberMask(whole_structure, center_mask).Selected():
+				line_elem += 1
+				if line_elem == 1:
+					obj_output.write("{0:>5}".format(atom_idx + 1))
 				else:
-					obj_output.write("{0}\n".format(" ".join(map(lambda x : "{0:>4}".format(x), matched_idxs[start_pos : ]))))
-				start_pos += 15
-			obj_output.write("\n")
+					obj_output.write(" {0:>5}".format(atom_idx + 1))
+
+				if line_elem % 15 == 0:
+					line_elem = 0
+					obj_output.write("\n")
+
+			if line_elem % 15 != 0:
+				line_elem = 0
+				obj_output.write("\n")
+
+		obj_output.write("\n")
 
 		# strip 構造の出力
 		obj_output.write("[ Strip ]\n")
-		start_pos = 0
 		if strip_mask is None:
 			# strip_mask が指定されていない場合 (全体と同じ)
-			start_pos = 0
-			while start_pos < len(whole_idxs):
-				if start_pos + 3 <= len(whole_idxs):
-					obj_output.write("{0}\n".format(" ".join(map(lambda x : "{0:>4}".format(x + 1), whole_idxs[start_pos : start_pos + 15]))))
+			line_elem = 0
+			for atom_idx in [x.idx for x in whole_structure.atoms]:
+				line_elem += 1
+				if line_elem == 1:
+					obj_output.write("{0:>5}".format(atom_idx + 1))
 				else:
-					obj_output.write("{0}\n".format(" ".join(map(lambda x : "{0:>4}".format(x + 1), whole_idxs[start_pos : ]))))
-				start_pos += 15
-			obj_output.write("\n")
+					obj_output.write(" {0:>5}".format(atom_idx + 1))
+
+				if line_elem % 15 == 0:
+					line_elem = 0
+					obj_output.write("\n")
+
+			if line_elem % 15 != 0:
+				line_elem = 0
+				obj_output.write("\n")
+
 		else:
 			# strip_mask がある場合
-			strip_structure = copy.deepcopy(whole_structure)
-			strip_structure.strip(strip_mask)
-
-			whole_infos = list(zip([x.name for x in whole_structure.atoms], [x.idx for x in whole_structure.atoms]))
-			strip_infos = list(zip([x.name for x in strip_structure.atoms], [x.idx for x in strip_structure.atoms]))
-			idx = 0
-			matched_idxs = []
-			for strip_info in strip_infos:
-				while idx < len(whole_infos):
-					if strip_info[0] == whole_infos[idx][0]:
-						# 原子名が同じ場合
-						matched_idxs.append(whole_infos[idx][1] + 1)
-						break
-					idx += 1
-				idx += 1
-
-			while start_pos < len(matched_idxs):
-				if start_pos + 3 <= len(matched_idxs):
-					obj_output.write("{0}\n".format(" ".join(map(lambda x : "{0:>4}".format(x), matched_idxs[start_pos : start_pos + 15]))))
+			line_elem = 0
+			for atom_idx in parmed.amber.AmberMask(whole_structure, "!" + strip_mask).Selected():
+				line_elem += 1
+				if line_elem == 1:
+					obj_output.write("{0:>5}".format(atom_idx + 1))
 				else:
-					obj_output.write("{0}\n".format(" ".join(map(lambda x : "{0:>4}".format(x), matched_idxs[start_pos : ]))))
-				start_pos += 15
-			obj_output.write("\n")
+					obj_output.write(" {0:>5}".format(atom_idx + 1))
+
+				if line_elem % 15 == 0:
+					line_elem = 0
+					obj_output.write("\n")
+
+			if line_elem % 15 != 0:
+				line_elem = 0
+				obj_output.write("\n")
+
+		obj_output.write("\n")
 
 	return tempfile_ndx
 
@@ -180,13 +191,13 @@ def convert_trajectory(top, tpr, trr, ndx, begin, end, prmtop, strip_mask, outpu
 	if end is not None:
 		command += " -e {0}".format(end)
 	command += " -n {0} << 'EOF'\n1\n2\nEOF".format(ndx)
-	exec_sp(command, True)
+	exec_sp(command, False)
 
 	# strip_mask が指定されていた場合
 	if strip_mask is not None:
 		sys.stderr.write("{start}Creating stripped tpr file ({file})\n{end}".format(file = tpr, start = basic.color.LRED + basic.color.BOLD, end = basic.color.END))
 
-		# grompp 用の構造ファイルの作成
+		# grompp 用の構造ファイルの作成 (strip 済み)
 		ref_coord = tempfile_name + "_ref.gro"
 		command = "{command} trjconv -s {input_tpr} -f {trajectory} -o {ref_coord} -n {ndx} -b 1 -e 1 << 'EOF'\n2\nEOF".format(command = command_gmx, trajectory = trajectories, input_tpr = tpr, ndx = ndx, ref_coord = ref_coord)
 		exec_sp(command, False)
@@ -206,7 +217,8 @@ def convert_trajectory(top, tpr, trr, ndx, begin, end, prmtop, strip_mask, outpu
 		# tpr の作成
 		temp_tpr = tempfile_name + ".tpr"
 		command = "{command} grompp -f {temp_mdp1} -c {ref_coord} -p {temp_top} -o {temp_tpr} -po {temp_mdp2}".format(command = command_gmx, temp_mdp1 = temp_mdp1, ref_coord = ref_coord, temp_top = temp_top, temp_tpr = temp_tpr, temp_mdp2 = temp_mdp2)
-		exec_sp(command, False)
+		print(command)
+		exec_sp(command, True)
 
 		# 後処理
 		tpr = temp_tpr
@@ -219,12 +231,12 @@ def convert_trajectory(top, tpr, trr, ndx, begin, end, prmtop, strip_mask, outpu
 	temp_traj2 = tempfile_name + "2.trr"
 	sys.stderr.write("{start}Creating centered trajectory ({file}){end}\n".format(file = temp_traj2, start = basic.color.LRED + basic.color.BOLD, end = basic.color.END))
 	trajectories = " ".join(trr)
-	command = "{command} trjconv -s {tpr} -f {trajectory} -o {output} -pbc res -center -ur compact".format(command = command_gmx, tpr = tpr, trajectory = temp_traj1, output = temp_traj2)
+	command = "{command} trjconv -s {tpr} -f {trajectory} -o {output} -pbc res -ur compact".format(command = command_gmx, tpr = tpr, trajectory = temp_traj1, output = temp_traj2)
 	if begin is not None:
 		command += " -b {0}".format(begin)
 	if end is not None:
 		command += " -e {0}".format(end)
-	command += " << 'EOF'\n1\n0\nEOF"
+	command += " << 'EOF'\n0\nEOF"
 	exec_sp(command, True)
 	os.remove(temp_traj1)
 	if strip_mask is not None:
