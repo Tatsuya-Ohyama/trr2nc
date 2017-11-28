@@ -45,35 +45,16 @@ def exec_sp(command, operation = False):
 		sys.exit(1)
 
 
-def make_prmtop(top, prmtop, strip_mask):
-	""" prmtop を作成する関数 """
-	sys.stderr.write("{start}Creating prmtop ({file}){end}\n".format(file = prmtop, start = basic.color.LRED + basic.color.BOLD, end = basic.color.END))
-
-	gromacs_top = parmed.gromacs.GromacsTopologyFile(top)
-	if strip_mask is not None:
-		gromacs_top.strip(strip_mask)
-	amber_top = parmed.amber.AmberParm.from_structure(gromacs_top)
-	amber_top.write_parm(prmtop)
-
-
-def make_ndx(top, strip_mask, center_mask):
+def make_ndx(output_file, list_system, list_center = None, list_strip = None):
 	""" ndx  ファイルを作成する関数 """
-	tempfile_ndx = ""
+	sys.stderr.write("{start}Creating ndx ({file}){end}\n".format(file = output_file, start = basic.color.LRED + basic.color.BOLD, end = basic.color.END))
 
-	with tempfile.NamedTemporaryFile(mode = "w", prefix = ".trr2nc_", dir = args.temp_dir) as obj_temp:
-		tempfile_name = obj_temp.name
-	tempfile_ndx = tempfile_name + ".ndx"
-	sys.stderr.write("{start}Creating ndx ({file}){end}\n".format(file = tempfile_ndx, start = basic.color.LRED + basic.color.BOLD, end = basic.color.END))
-
-	import copy
-
-	with open(tempfile_ndx, "w") as obj_output:
+	with open(output_file, "w") as obj_output:
 		# 全体の ndx の出力
 		obj_output.write("[ System ]\n")
-		whole_structure = parmed.gromacs.GromacsTopologyFile(top)
 
 		line_elem = 0
-		for atom_idx in [x.idx for x in whole_structure.atoms]:
+		for atom_idx in list_system:
 			line_elem += 1
 			if line_elem == 1:
 				obj_output.write("{0:>5}".format(atom_idx + 1))
@@ -91,29 +72,11 @@ def make_ndx(top, strip_mask, center_mask):
 		obj_output.write("\n")
 
 		# 中心構造の出力
-		obj_output.write("[ Center ]\n")
-		if center_mask is None:
-			# center_mask が指定されていない場合 (全体と同じ)
-			line_elem = 0
-			for atom_idx in [x.idx for x in whole_structure.atoms]:
-				line_elem += 1
-				if line_elem == 1:
-					obj_output.write("{0:>5}".format(atom_idx + 1))
-				else:
-					obj_output.write(" {0:>5}".format(atom_idx + 1))
-
-				if line_elem % 15 == 0:
-					line_elem = 0
-					obj_output.write("\n")
-
-			if line_elem % 15 != 0:
-				line_elem = 0
-				obj_output.write("\n")
-
-		else:
+		if list_center is not None:
 			# center_mask がある場合
+			obj_output.write("[ Center ]\n")
 			line_elem = 0
-			for atom_idx in parmed.amber.AmberMask(whole_structure, center_mask).Selected():
+			for atom_idx in list_center:
 				line_elem += 1
 				if line_elem == 1:
 					obj_output.write("{0:>5}".format(atom_idx + 1))
@@ -131,29 +94,11 @@ def make_ndx(top, strip_mask, center_mask):
 		obj_output.write("\n")
 
 		# strip 構造の出力
-		obj_output.write("[ Strip ]\n")
-		if strip_mask is None:
-			# strip_mask が指定されていない場合 (全体と同じ)
-			line_elem = 0
-			for atom_idx in [x.idx for x in whole_structure.atoms]:
-				line_elem += 1
-				if line_elem == 1:
-					obj_output.write("{0:>5}".format(atom_idx + 1))
-				else:
-					obj_output.write(" {0:>5}".format(atom_idx + 1))
-
-				if line_elem % 15 == 0:
-					line_elem = 0
-					obj_output.write("\n")
-
-			if line_elem % 15 != 0:
-				line_elem = 0
-				obj_output.write("\n")
-
-		else:
+		if list_strip is not None:
 			# strip_mask がある場合
+			obj_output.write("[ Strip ]\n")
 			line_elem = 0
-			for atom_idx in parmed.amber.AmberMask(whole_structure, "!" + strip_mask).Selected():
+			for atom_idx in list_strip:
 				line_elem += 1
 				if line_elem == 1:
 					obj_output.write("{0:>5}".format(atom_idx + 1))
@@ -170,41 +115,50 @@ def make_ndx(top, strip_mask, center_mask):
 
 		obj_output.write("\n")
 
-	return tempfile_ndx
+	return output_file
 
 
-def convert_trajectory(top, tpr, trr, ndx, begin, end, prmtop, strip_mask, output):
+def convert_trajectory(top, tpr, trr, prmtop, output, flag_overwrite, center_mask = None, strip_mask = None, begin = None, end = None):
 	""" トラジェクトリを trr から nc に変換する関数 """
 	command_gmx = check_command("gmx")
 
+	# 一時ファイル名の決定
 	tempfile_name = ""
 	with tempfile.NamedTemporaryFile(mode = "w", prefix = ".trr2nc_", dir = args.temp_dir) as obj_temp:
 		tempfile_name = obj_temp.name
 
+	# トポロジーファイルの読み込み
+	obj_top = parmed.gromacs.GromacsTopologyFile(top)
+
+
 	# 周期境界でジャンプしないトラジェクトリの作成
 	temp_traj1 = tempfile_name + "1.trr"
+	temp_ndx = tempfile_name + ".ndx"
 	sys.stderr.write("{start}Creating nojump trajectory ({file}){end}\n".format(file = temp_traj1, start = basic.color.LRED + basic.color.BOLD, end = basic.color.END))
+
 	trajectories = " ".join(trr)
-	command = "{command} trjconv -s {tpr} -f {trajectory} -o {output} -pbc nojump -center".format(command = command_gmx, tpr = tpr, trajectory = trajectories, output = temp_traj1)
+	command = "{command} trjconv -s {tpr} -f {trajectory} -o {output} -pbc nojump".format(command = command_gmx, tpr = tpr, trajectory = trajectories, output = temp_traj1)
 	if begin is not None:
 		command += " -b {0}".format(begin)
 	if end is not None:
 		command += " -e {0}".format(end)
-	command += " -n {0} << 'EOF'\n1\n2\nEOF".format(ndx)
-	exec_sp(command, False)
-
-	# strip_mask が指定されていた場合
-	if strip_mask is not None:
-		sys.stderr.write("{start}Creating stripped tpr file ({file})\n{end}".format(file = tpr, start = basic.color.LRED + basic.color.BOLD, end = basic.color.END))
+	if strip_mask is None:
+		# strip_mask が指定されていない場合
+		make_ndx(temp_ndx, [x.idx for x in obj_top.atoms])
+		command += " -n {0} << 'EOF'\n0\nEOF".format(temp_ndx)
+	else:
+		# strip_mask が指定されていた場合
+		amber_mask = parmed.amber.AmberMask(obj_top, strip_mask)
+		make_ndx(temp_ndx, [x.idx for x in obj_top.atoms], None, [x for x in amber_mask.Selected(invert = True)])
+		command += " -n {0} << 'EOF'\n1\nEOF".format(temp_ndx)
 
 		# grompp 用の構造ファイルの作成 (strip 済み)
 		ref_coord = tempfile_name + "_ref.gro"
-		command = "{command} trjconv -s {input_tpr} -f {trajectory} -o {ref_coord} -n {ndx} -b 1 -e 1 << 'EOF'\n2\nEOF".format(command = command_gmx, trajectory = trajectories, input_tpr = tpr, ndx = ndx, ref_coord = ref_coord)
-		exec_sp(command, False)
+		command_sub = "{command} trjconv -s {input_tpr} -f {trajectory} -o {ref_coord} -n {ndx} -b 1 -e 1 << 'EOF'\n2\nEOF".format(command = command_gmx, trajectory = trajectories, input_tpr = tpr, ndx = temp_ndx, ref_coord = ref_coord)
+		exec_sp(command_sub, False)
 
 		# strip したトポロジーの作成
 		temp_top = tempfile_name + ".top"
-		obj_top = parmed.gromacs.GromacsTopologyFile(top)
 		obj_top.strip(strip_mask)
 		obj_top.write(temp_top)
 
@@ -216,9 +170,8 @@ def convert_trajectory(top, tpr, trr, ndx, begin, end, prmtop, strip_mask, outpu
 
 		# tpr の作成
 		temp_tpr = tempfile_name + ".tpr"
-		command = "{command} grompp -f {temp_mdp1} -c {ref_coord} -p {temp_top} -o {temp_tpr} -po {temp_mdp2}".format(command = command_gmx, temp_mdp1 = temp_mdp1, ref_coord = ref_coord, temp_top = temp_top, temp_tpr = temp_tpr, temp_mdp2 = temp_mdp2)
-		print(command)
-		exec_sp(command, True)
+		command_sub = "{command} grompp -f {temp_mdp1} -c {ref_coord} -p {temp_top} -o {temp_tpr} -po {temp_mdp2}".format(command = command_gmx, temp_mdp1 = temp_mdp1, ref_coord = ref_coord, temp_top = temp_top, temp_tpr = temp_tpr, temp_mdp2 = temp_mdp2)
+		exec_sp(command_sub, True)
 
 		# 後処理
 		tpr = temp_tpr
@@ -226,6 +179,8 @@ def convert_trajectory(top, tpr, trr, ndx, begin, end, prmtop, strip_mask, outpu
 		os.remove(temp_top)
 		os.remove(temp_mdp1)
 		os.remove(temp_mdp2)
+
+	exec_sp(command, False)
 
 	# 分子を中央に配置したトラジェクトリの作成
 	temp_traj2 = tempfile_name + "2.trr"
@@ -236,11 +191,25 @@ def convert_trajectory(top, tpr, trr, ndx, begin, end, prmtop, strip_mask, outpu
 		command += " -b {0}".format(begin)
 	if end is not None:
 		command += " -e {0}".format(end)
-	command += " << 'EOF'\n0\nEOF"
+	if center_mask is None:
+		command += " << 'EOF'\n0\nEOF"
+	else:
+		amber_mask = parmed.amber.AmberMask(obj_top, center_mask)
+		make_ndx(temp_ndx, [x.idx for x in obj_top.atoms], [x for x in amber_mask.Selected()], None)
+		command += " -center -n {ndx} << 'EOF'\n1\n0\nEOF".format(ndx = temp_ndx)
 	exec_sp(command, True)
 	os.remove(temp_traj1)
 	if strip_mask is not None:
 		os.remove(tpr)
+	os.remove(temp_ndx)
+
+	# prmtop の作成
+	sys.stderr.write("{start}Creating prmtop ({file}){end}\n".format(file = prmtop, start = basic.color.LRED + basic.color.BOLD, end = basic.color.END))
+	if flag_overwrite == False:
+		basic.check_overwrite(prmtop)
+
+	amber_top = parmed.amber.AmberParm.from_structure(obj_top)
+	amber_top.write_parm(prmtop)
 
 	# nc ファイルに変換
 	temp_in = tempfile_name + ".in"
@@ -288,12 +257,5 @@ if __name__ == '__main__':
 
 	if args.flag_overwrite == False:
 		basic.check_overwrite(args.prmtop)
-	if os.path.exists(args.prmtop):
-		os.remove(args.prmtop)
-	make_prmtop(args.top, args.prmtop, args.strip_mask)
-	ndx = make_ndx(args.top, args.strip_mask, args.center_mask)
 
-	convert_trajectory(args.top, args.tpr, args.trr, ndx, args.begin, args.end, args.prmtop, args.strip_mask, args.nc)
-
-	if args.strip_mask is not None:
-		os.remove(ndx)
+	convert_trajectory(args.top, args.tpr, args.trr, args.prmtop, args.nc, args.flag_overwrite, args.center_mask, args.strip_mask, args.begin, args.end)
