@@ -154,7 +154,7 @@ def convert_trajectory(top, tpr, trr, prmtop, output, flag_overwrite, center_mas
 
 		# grompp 用の構造ファイルの作成 (strip 済み)
 		ref_coord = tempfile_name + "_ref.gro"
-		command_sub = "{command} trjconv -s {input_tpr} -f {trajectory} -o {ref_coord} -n {ndx} -b 1 -e 1 << 'EOF'\n2\nEOF".format(command = command_gmx, trajectory = trajectories, input_tpr = tpr, ndx = temp_ndx, ref_coord = ref_coord)
+		command_sub = "{command} trjconv -s {input_tpr} -f {trajectory} -o {ref_coord} -n {ndx} -b 1 -e 1 << 'EOF'\n1\nEOF".format(command = command_gmx, trajectory = trajectories, input_tpr = tpr, ndx = temp_ndx, ref_coord = ref_coord)
 		exec_sp(command_sub, False)
 
 		# strip したトポロジーの作成
