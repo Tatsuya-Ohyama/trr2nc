@@ -14,7 +14,8 @@ import subprocess
 import tempfile
 
 sys.path.append(os.path.join(os.path.dirname(os.path.realpath(sys.argv[0])), "modules"))
-from py_module_basic import basic
+import basic_func
+import basic_class
 import parmed
 
 # =============== functions =============== #
@@ -47,7 +48,7 @@ def exec_sp(command, operation = False):
 
 def make_ndx(output_file, list_system, list_center = None, list_strip = None):
 	""" ndx  ファイルを作成する関数 """
-	sys.stderr.write("{start}Creating ndx ({file}){end}\n".format(file = output_file, start = basic.color.LRED + basic.color.BOLD, end = basic.color.END))
+	sys.stderr.write("{start}Creating ndx ({file}){end}\n".format(file = output_file, start = basic_class.Color.LRED + basic_class.Color.BOLD, end = basic_class.Color.END))
 
 	with open(output_file, "w") as obj_output:
 		# 全体の ndx の出力
@@ -134,7 +135,7 @@ def convert_trajectory(top, tpr, trr, prmtop, output, flag_overwrite, center_mas
 	# 周期境界でジャンプしないトラジェクトリの作成
 	temp_traj1 = tempfile_name + "1.trr"
 	temp_ndx = tempfile_name + ".ndx"
-	sys.stderr.write("{start}Creating nojump trajectory ({file}){end}\n".format(file = temp_traj1, start = basic.color.LRED + basic.color.BOLD, end = basic.color.END))
+	sys.stderr.write("{start}Creating nojump trajectory ({file}){end}\n".format(file = temp_traj1, start = basic_class.Color.LRED + basic_class.Color.BOLD, end = basic_class.Color.END))
 
 	trajectories = " ".join(trr)
 	command = "{command} trjconv -s {tpr} -f {trajectory} -o {output} -pbc nojump".format(command = command_gmx, tpr = tpr, trajectory = trajectories, output = temp_traj1)
@@ -154,7 +155,7 @@ def convert_trajectory(top, tpr, trr, prmtop, output, flag_overwrite, center_mas
 
 		# grompp 用の構造ファイルの作成 (strip 済み)
 		ref_coord = tempfile_name + "_ref.gro"
-		command_sub = "{command} trjconv -s {input_tpr} -f {trajectory} -o {ref_coord} -n {ndx} -b 1 -e 1 << 'EOF'\n2\nEOF".format(command = command_gmx, trajectory = trajectories, input_tpr = tpr, ndx = temp_ndx, ref_coord = ref_coord)
+		command_sub = "{command} trjconv -s {input_tpr} -f {trajectory} -o {ref_coord} -n {ndx} -b 1 -e 1 << 'EOF'\n1\nEOF".format(command = command_gmx, trajectory = trajectories, input_tpr = tpr, ndx = temp_ndx, ref_coord = ref_coord)
 		exec_sp(command_sub, False)
 
 		# strip したトポロジーの作成
@@ -184,7 +185,7 @@ def convert_trajectory(top, tpr, trr, prmtop, output, flag_overwrite, center_mas
 
 	# 分子を中央に配置したトラジェクトリの作成
 	temp_traj2 = tempfile_name + "2.trr"
-	sys.stderr.write("{start}Creating centered trajectory ({file}){end}\n".format(file = temp_traj2, start = basic.color.LRED + basic.color.BOLD, end = basic.color.END))
+	sys.stderr.write("{start}Creating centered trajectory ({file}){end}\n".format(file = temp_traj2, start = basic_class.Color.LRED + basic_class.Color.BOLD, end = basic_class.Color.END))
 	trajectories = " ".join(trr)
 	command = "{command} trjconv -s {tpr} -f {trajectory} -o {output} -pbc res -ur compact".format(command = command_gmx, tpr = tpr, trajectory = temp_traj1, output = temp_traj2)
 	if begin is not None:
@@ -204,16 +205,16 @@ def convert_trajectory(top, tpr, trr, prmtop, output, flag_overwrite, center_mas
 	os.remove(temp_ndx)
 
 	# prmtop の作成
-	sys.stderr.write("{start}Creating prmtop ({file}){end}\n".format(file = prmtop, start = basic.color.LRED + basic.color.BOLD, end = basic.color.END))
+	sys.stderr.write("{start}Creating prmtop ({file}){end}\n".format(file = prmtop, start = basic_class.Color.LRED + basic_class.Color.BOLD, end = basic_class.Color.END))
 	if flag_overwrite == False:
-		basic.check_overwrite(prmtop)
+		basic_func.check_overwrite(prmtop)
 
 	amber_top = parmed.amber.AmberParm.from_structure(obj_top)
 	amber_top.write_parm(prmtop)
 
 	# nc ファイルに変換
 	temp_in = tempfile_name + ".in"
-	sys.stderr.write("{start}Converting AMBER trajectory ({file}){end}\n".format(file = output, start = basic.color.LRED + basic.color.BOLD, end = basic.color.END))
+	sys.stderr.write("{start}Converting AMBER trajectory ({file}){end}\n".format(file = output, start = basic_class.Color.LRED + basic_class.Color.BOLD, end = basic_class.Color.END))
 	with open(temp_in, "w") as obj_output:
 		obj_output.write("parm {0}\n".format(prmtop))
 		obj_output.write("trajin {0}\n".format(temp_traj2))
@@ -250,12 +251,12 @@ if __name__ == '__main__':
 
 	args = parser.parse_args()
 
-	basic.check_exist(args.tpr, 2)
+	basic_func.check_exist(args.tpr, 2)
 	for trj_file in args.trr:
-		basic.check_exist(trj_file, 2)
-	basic.check_exist(args.top, 2)
+		basic_func.check_exist(trj_file, 2)
+	basic_func.check_exist(args.top, 2)
 
 	if args.flag_overwrite == False:
-		basic.check_overwrite(args.prmtop)
+		basic_func.check_overwrite(args.prmtop)
 
 	convert_trajectory(args.top, args.tpr, args.trr, args.prmtop, args.nc, args.flag_overwrite, args.center_mask, args.strip_mask, args.begin, args.end)
