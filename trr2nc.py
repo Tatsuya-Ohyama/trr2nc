@@ -171,7 +171,7 @@ def convert_trajectory(top, tpr, trr, prmtop, output, flag_overwrite, center_mas
 
 		# tpr の作成
 		temp_tpr = tempfile_name + ".tpr"
-		command_sub = "{command} grompp -f {temp_mdp1} -c {ref_coord} -p {temp_top} -o {temp_tpr} -po {temp_mdp2}".format(command = command_gmx, temp_mdp1 = temp_mdp1, ref_coord = ref_coord, temp_top = temp_top, temp_tpr = temp_tpr, temp_mdp2 = temp_mdp2)
+		command_sub = "{command} grompp -f {temp_mdp1} -c {ref_coord} -p {temp_top} -o {temp_tpr} -po {temp_mdp2} -maxwarn 10".format(command = command_gmx, temp_mdp1 = temp_mdp1, ref_coord = ref_coord, temp_top = temp_top, temp_tpr = temp_tpr, temp_mdp2 = temp_mdp2)
 		exec_sp(command_sub, True)
 
 		# 後処理
