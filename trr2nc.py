@@ -16,7 +16,8 @@ from termcolor import colored
 
 from basic_func import check_exist, check_overwrite
 from molecule_topology import MoleculeTopology
-from classes.ndx_file import NDXFile
+from ndx_file import NDXFile
+
 
 # =============== functions =============== #
 def check_command(command_name):
