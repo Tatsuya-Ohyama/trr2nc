@@ -121,9 +121,11 @@ if __name__ == '__main__':
 
 		# strip したトポロジーの作成
 		temp_top = tempfile_name + ".top"
-		obj_top.set_mask("!" + args.strip_mask)
-		obj_top.save_pickle("test.pickle")
+		obj_top.set_mask("!" + args.strip_mask, True)
 		obj_top.save_file(temp_top)
+
+		# ndx ファイルの更新
+		obj_ndx = NDXFile(obj_top)
 
 		# grompp 用の mdp ファイルの作成
 		temp_mdp1 = tempfile_name + "1.mdp"
@@ -134,7 +136,7 @@ if __name__ == '__main__':
 		# tpr の作成
 		temp_tpr = tempfile_name + ".tpr"
 		command_sub = "{command} grompp -f {temp_mdp1} -c {ref_coord} -p {temp_top} -o {temp_tpr} -po {temp_mdp2} -maxwarn 10".format(command = command_gmx, temp_mdp1 = temp_mdp1, ref_coord = ref_coord, temp_top = temp_top, temp_tpr = temp_tpr, temp_mdp2 = temp_mdp2)
-		exec_sp(command_sub, True)
+		exec_sp(command_sub, False)
 
 		# 後処理
 		tpr = temp_tpr
@@ -143,12 +145,12 @@ if __name__ == '__main__':
 		os.remove(temp_mdp1)
 		os.remove(temp_mdp2)
 
-	exec_sp(command, False)
+	exec_sp(command, True)
 
 
 	# 分子を中央に配置したトラジェクトリの作成
 	temp_traj2 = tempfile_name + "2.trr"
-	sys.stderr.write(colored("Creating centered trajectory ({file})\n".format(file = temp_traj2), "red", attrs = ["bold"]))
+	sys.stderr.write(colored("INFO: Creating centered trajectory ({file})\n".format(file = temp_traj2), "red", attrs = ["bold"]))
 	trajectories = " ".join(args.trr)
 	command = "{command} trjconv -s {tpr} -f {trajectory} -o {output} -pbc res -ur compact".format(command = command_gmx, tpr = tpr, trajectory = temp_traj1, output = temp_traj2)
 
@@ -166,7 +168,7 @@ if __name__ == '__main__':
 
 
 	# prmtop の作成
-	sys.stderr.write(colored("Creating prmtop ({file})\n".format(file = args.prmtop), "red", attrs = ["bold"]))
+	sys.stderr.write(colored("INFO: Creating prmtop ({file})\n".format(file = args.prmtop), "red", attrs = ["bold"]))
 	if args.flag_overwrite == False:
 		check_overwrite(prmtop)
 	obj_top.save_file(args.prmtop)
@@ -177,7 +179,7 @@ if __name__ == '__main__':
 		check_overwrite(args.nc)
 
 	temp_in = tempfile_name + ".in"
-	sys.stderr.write(colored("Converting AMBER trajectory ({file})\n".format(file = args.nc), "red", attrs = ["bold"]))
+	sys.stderr.write(colored("INFO: Converting AMBER trajectory ({file})\n".format(file = args.nc), "red", attrs = ["bold"]))
 	with open(temp_in, "w") as obj_output:
 		obj_output.write("parm {0}\n".format(args.prmtop))
 		obj_output.write("trajin {0}\n".format(temp_traj2))
