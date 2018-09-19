@@ -12,11 +12,11 @@ signal.signal(signal.SIGINT, signal.SIG_DFL)
 import argparse
 import subprocess
 import tempfile
+from termcolor import colored
 
-sys.path.append(os.path.join(os.path.dirname(os.path.realpath(sys.argv[0])), "modules"))
-import basic_func
-import basic_class
-import parmed
+from basic_func import check_exist, check_overwrite
+from molecule_topology import MoleculeTopology
+from classes.ndx_file import NDXFile
 
 # =============== functions =============== #
 def check_command(command_name):
@@ -46,81 +46,35 @@ def exec_sp(command, operation = False):
 		sys.exit(1)
 
 
-def make_ndx(output_file, list_system, list_center = None, list_strip = None):
-	""" ndx  ファイルを作成する関数 """
-	sys.stderr.write("{start}Creating ndx ({file}){end}\n".format(file = output_file, start = basic_class.Color.LRED + basic_class.Color.BOLD, end = basic_class.Color.END))
+# =============== main =============== #
+if __name__ == '__main__':
+	parser = argparse.ArgumentParser(description = "trr2nc.py - Convert trr to nc with treating PBC", formatter_class=argparse.RawTextHelpFormatter)
 
-	with open(output_file, "w") as obj_output:
-		# 全体の ndx の出力
-		obj_output.write("[ System ]\n")
+	parser.add_argument("-s", dest = "tpr", metavar = "INPUT.tpr", required = True, help = "Gromacs run input file")
+	parser.add_argument("-x", dest = "trr", metavar = "INPUT.<trr|xtc|gro>", required = True, nargs = "+", help = "Gromacs trajectory file")
+	parser.add_argument("-o", dest = "nc", metavar = "OUTPUT.<nc|mdcrd>", required = True, help = "output for Amber trajectory (.nc)")
+	parser.add_argument("-t", dest = "top", metavar = "INPUT.top", required = True, help = "Gromacs topology file when prmtop does not exist")
+	parser.add_argument("-p", dest = "prmtop", metavar = "OUTPUT.prmtop", required = True, help = "Amber topology file")
+	parser.add_argument("-sc", dest = "temp_dir", metavar = "TEMP_DIR", default = ".", help = "temporary directory (Default: current dir)")
 
-		line_elem = 0
-		for atom_idx in list_system:
-			line_elem += 1
-			if line_elem == 1:
-				obj_output.write("{0:>5}".format(atom_idx + 1))
-			else:
-				obj_output.write(" {0:>5}".format(atom_idx + 1))
+	gmx_option = parser.add_argument_group("gromacs option")
+	gmx_option.add_argument("-b", dest = "begin", metavar = "START_TIME", type = int, help = "First frame (ps) to read from trajectory (start from 0)")
+	gmx_option.add_argument("-e", dest = "end", metavar = "END_TIME", type = int, help = "Last frame (ps) to read from trajectory (start from 0)")
 
-			if line_elem % 15 == 0:
-				line_elem = 0
-				obj_output.write("\n")
+	cpptraj_option = parser.add_argument_group("cpptraj option")
+	cpptraj_option.add_argument("-mc", dest = "center_mask", metavar = "CENTER_MASK", help = "center mask for cpptraj")
+	cpptraj_option.add_argument("-ms", dest = "strip_mask", metavar = "STRIP_MASK", help = "strip mask for cpptraj")
 
-		if line_elem % 15 != 0:
-			line_elem = 0
-			obj_output.write("\n")
+	parser.add_argument("-O", dest = "flag_overwrite", action = "store_true", default = False, help = "overwrite forcibly")
 
-		obj_output.write("\n")
+	args = parser.parse_args()
 
-		# 中心構造の出力
-		if list_center is not None:
-			# center_mask がある場合
-			obj_output.write("[ Center ]\n")
-			line_elem = 0
-			for atom_idx in list_center:
-				line_elem += 1
-				if line_elem == 1:
-					obj_output.write("{0:>5}".format(atom_idx + 1))
-				else:
-					obj_output.write(" {0:>5}".format(atom_idx + 1))
-
-				if line_elem % 15 == 0:
-					line_elem = 0
-					obj_output.write("\n")
-
-			if line_elem % 15 != 0:
-				line_elem = 0
-				obj_output.write("\n")
-
-		obj_output.write("\n")
-
-		# strip 構造の出力
-		if list_strip is not None:
-			# strip_mask がある場合
-			obj_output.write("[ Strip ]\n")
-			line_elem = 0
-			for atom_idx in list_strip:
-				line_elem += 1
-				if line_elem == 1:
-					obj_output.write("{0:>5}".format(atom_idx + 1))
-				else:
-					obj_output.write(" {0:>5}".format(atom_idx + 1))
-
-				if line_elem % 15 == 0:
-					line_elem = 0
-					obj_output.write("\n")
-
-			if line_elem % 15 != 0:
-				line_elem = 0
-				obj_output.write("\n")
-
-		obj_output.write("\n")
-
-	return output_file
+	check_exist(args.tpr, 2)
+	for trj_file in args.trr:
+		check_exist(trj_file, 2)
+	check_exist(args.top, 2)
 
 
-def convert_trajectory(top, tpr, trr, prmtop, output, flag_overwrite, center_mask = None, strip_mask = None, begin = None, end = None):
-	""" トラジェクトリを trr から nc に変換する関数 """
 	command_gmx = check_command("gmx")
 
 	# 一時ファイル名の決定
@@ -128,40 +82,50 @@ def convert_trajectory(top, tpr, trr, prmtop, output, flag_overwrite, center_mas
 	with tempfile.NamedTemporaryFile(mode = "w", prefix = ".trr2nc_", dir = args.temp_dir) as obj_temp:
 		tempfile_name = obj_temp.name
 
+
 	# トポロジーファイルの読み込み
-	obj_top = parmed.gromacs.GromacsTopologyFile(top)
+	obj_top = MoleculeTopology(args.top)
 
 
 	# 周期境界でジャンプしないトラジェクトリの作成
 	temp_traj1 = tempfile_name + "1.trr"
 	temp_ndx = tempfile_name + ".ndx"
-	sys.stderr.write("{start}Creating nojump trajectory ({file}){end}\n".format(file = temp_traj1, start = basic_class.Color.LRED + basic_class.Color.BOLD, end = basic_class.Color.END))
+	sys.stderr.write(colored("Creating nojump trajectory ({file})\n".format(file = temp_traj1), "red", attrs = ["bold"]))
 
-	trajectories = " ".join(trr)
+	tpr = args.tpr
+	trajectories = " ".join(args.trr)
 	command = "{command} trjconv -s {tpr} -f {trajectory} -o {output} -pbc nojump".format(command = command_gmx, tpr = tpr, trajectory = trajectories, output = temp_traj1)
-	if begin is not None:
-		command += " -b {0}".format(begin)
-	if end is not None:
-		command += " -e {0}".format(end)
-	if strip_mask is None:
+	if args.begin is not None:
+		command += " -b {0}".format(args.begin)
+	if args.end is not None:
+		command += " -e {0}".format(args.end)
+
+	obj_ndx = NDXFile(obj_top)
+	if args.strip_mask is None:
 		# strip_mask が指定されていない場合
-		make_ndx(temp_ndx, [x.idx for x in obj_top.atoms])
+		obj_ndx.output_ndx(temp_ndx)
 		command += " -n {0} << 'EOF'\n0\nEOF".format(temp_ndx)
 	else:
 		# strip_mask が指定されていた場合
-		amber_mask = parmed.amber.AmberMask(obj_top, strip_mask)
-		make_ndx(temp_ndx, [x.idx for x in obj_top.atoms], None, [x for x in amber_mask.Selected(invert = True)])
+		# ndx ファイルの作成
+		obj_ndx.add_def("Strip", "!" + args.strip_mask).output_ndx(temp_ndx)
+		obj_ndx.del_def(1)
 		command += " -n {0} << 'EOF'\n1\nEOF".format(temp_ndx)
 
+
+		# 次の中央配置のための準備
 		# grompp 用の構造ファイルの作成 (strip 済み)
 		ref_coord = tempfile_name + "_ref.gro"
-		command_sub = "{command} trjconv -s {input_tpr} -f {trajectory} -o {ref_coord} -n {ndx} -b 1 -e 1 << 'EOF'\n1\nEOF".format(command = command_gmx, trajectory = trajectories, input_tpr = tpr, ndx = temp_ndx, ref_coord = ref_coord)
+		command_sub = "{command} trjconv -s {input_tpr} -f {trajectory} -o {ref_coord} -n {ndx} -b 1 -e 1 << 'EOF'\n1\nEOF".format(command = command_gmx, trajectory = trajectories, input_tpr = args.tpr, ndx = temp_ndx, ref_coord = ref_coord)
 		exec_sp(command_sub, False)
 
 		# strip したトポロジーの作成
 		temp_top = tempfile_name + ".top"
-		obj_top.strip(strip_mask)
-		obj_top.write(temp_top)
+		obj_top.set_mask("!" + args.strip_mask, True)
+		obj_top.save_file(temp_top)
+
+		# ndx ファイルの更新
+		obj_ndx = NDXFile(obj_top)
 
 		# grompp 用の mdp ファイルの作成
 		temp_mdp1 = tempfile_name + "1.mdp"
@@ -172,7 +136,7 @@ def convert_trajectory(top, tpr, trr, prmtop, output, flag_overwrite, center_mas
 		# tpr の作成
 		temp_tpr = tempfile_name + ".tpr"
 		command_sub = "{command} grompp -f {temp_mdp1} -c {ref_coord} -p {temp_top} -o {temp_tpr} -po {temp_mdp2} -maxwarn 10".format(command = command_gmx, temp_mdp1 = temp_mdp1, ref_coord = ref_coord, temp_top = temp_top, temp_tpr = temp_tpr, temp_mdp2 = temp_mdp2)
-		exec_sp(command_sub, True)
+		exec_sp(command_sub, False)
 
 		# 後処理
 		tpr = temp_tpr
@@ -181,44 +145,45 @@ def convert_trajectory(top, tpr, trr, prmtop, output, flag_overwrite, center_mas
 		os.remove(temp_mdp1)
 		os.remove(temp_mdp2)
 
-	exec_sp(command, False)
+	exec_sp(command, True)
+
 
 	# 分子を中央に配置したトラジェクトリの作成
 	temp_traj2 = tempfile_name + "2.trr"
-	sys.stderr.write("{start}Creating centered trajectory ({file}){end}\n".format(file = temp_traj2, start = basic_class.Color.LRED + basic_class.Color.BOLD, end = basic_class.Color.END))
-	trajectories = " ".join(trr)
+	sys.stderr.write(colored("INFO: Creating centered trajectory ({file})\n".format(file = temp_traj2), "red", attrs = ["bold"]))
+	trajectories = " ".join(args.trr)
 	command = "{command} trjconv -s {tpr} -f {trajectory} -o {output} -pbc res -ur compact".format(command = command_gmx, tpr = tpr, trajectory = temp_traj1, output = temp_traj2)
-	if begin is not None:
-		command += " -b {0}".format(begin)
-	if end is not None:
-		command += " -e {0}".format(end)
-	if center_mask is None:
+
+	if args.center_mask is None:
 		command += " << 'EOF'\n0\nEOF"
 	else:
-		amber_mask = parmed.amber.AmberMask(obj_top, center_mask)
-		make_ndx(temp_ndx, [x.idx for x in obj_top.atoms], [x for x in amber_mask.Selected()], None)
+		obj_ndx = NDXFile(obj_top).add_def("Center", args.center_mask).output_ndx(temp_ndx)
 		command += " -center -n {ndx} << 'EOF'\n1\n0\nEOF".format(ndx = temp_ndx)
 	exec_sp(command, True)
+
 	os.remove(temp_traj1)
-	if strip_mask is not None:
+	if args.strip_mask is not None:
 		os.remove(tpr)
 	os.remove(temp_ndx)
 
-	# prmtop の作成
-	sys.stderr.write("{start}Creating prmtop ({file}){end}\n".format(file = prmtop, start = basic_class.Color.LRED + basic_class.Color.BOLD, end = basic_class.Color.END))
-	if flag_overwrite == False:
-		basic_func.check_overwrite(prmtop)
 
-	amber_top = parmed.amber.AmberParm.from_structure(obj_top)
-	amber_top.write_parm(prmtop)
+	# prmtop の作成
+	sys.stderr.write(colored("INFO: Creating prmtop ({file})\n".format(file = args.prmtop), "red", attrs = ["bold"]))
+	if args.flag_overwrite == False:
+		check_overwrite(prmtop)
+	obj_top.save_file(args.prmtop)
+
 
 	# nc ファイルに変換
+	if args.flag_overwrite == False:
+		check_overwrite(args.nc)
+
 	temp_in = tempfile_name + ".in"
-	sys.stderr.write("{start}Converting AMBER trajectory ({file}){end}\n".format(file = output, start = basic_class.Color.LRED + basic_class.Color.BOLD, end = basic_class.Color.END))
+	sys.stderr.write(colored("INFO: Converting AMBER trajectory ({file})\n".format(file = args.nc), "red", attrs = ["bold"]))
 	with open(temp_in, "w") as obj_output:
-		obj_output.write("parm {0}\n".format(prmtop))
+		obj_output.write("parm {0}\n".format(args.prmtop))
 		obj_output.write("trajin {0}\n".format(temp_traj2))
-		obj_output.write("trajout {0}\n".format(output))
+		obj_output.write("trajout {0}\n".format(args.nc))
 		obj_output.write("go\n")
 
 	command_cpptraj = check_command("cpptraj")
@@ -226,37 +191,3 @@ def convert_trajectory(top, tpr, trr, prmtop, output, flag_overwrite, center_mas
 
 	os.remove(temp_traj2)
 	os.remove(temp_in)
-
-
-# =============== main =============== #
-if __name__ == '__main__':
-	parser = argparse.ArgumentParser(description = "trr2nc.py - Convert trr to nc with treating PBC", formatter_class=argparse.RawTextHelpFormatter)
-
-	parser.add_argument("-s", dest = "tpr", metavar = "INPUT.tpr", required = True, help = "Gromacs run input file")
-	parser.add_argument("-x", dest = "trr", metavar = "INPUT.<trr|xtc|gro>", required = True, nargs = "+", help = "Gromacs trajectory file")
-	parser.add_argument("-o", dest = "nc", metavar = "OUTPUT.<nc|mdcrd>", required = True, help = "output for Amber trajectory (.nc)")
-	parser.add_argument("-p", dest = "prmtop", metavar = "INPUT.prmtop", required = True, help = "Amber topology file")
-	parser.add_argument("-t", dest = "top", metavar = "INPUT.top", required = True, help = "Gromacs topology file when prmtop does not exist")
-	parser.add_argument("-sc", dest = "temp_dir", metavar = "TEMP_DIR", default = ".", help = "temporary directory (Default: current dir)")
-
-	gmx_option = parser.add_argument_group("gromacs option")
-	gmx_option.add_argument("-b", dest = "begin", metavar = "START_TIME", type = int, help = "First frame (ps) to read from trajectory")
-	gmx_option.add_argument("-e", dest = "end", metavar = "END_TIME", type = int, help = "Last frame (ps) to read from trajectory")
-
-	cpptraj_option = parser.add_argument_group("cpptraj option")
-	cpptraj_option.add_argument("-mc", dest = "center_mask", metavar = "CENTER_MASK", help = "center mask for cpptraj")
-	cpptraj_option.add_argument("-ms", dest = "strip_mask", metavar = "STRIP_MASK", help = "strip mask for cpptraj")
-
-	parser.add_argument("-O", dest = "flag_overwrite", action = "store_true", default = False, help = "overwrite forcibly")
-
-	args = parser.parse_args()
-
-	basic_func.check_exist(args.tpr, 2)
-	for trj_file in args.trr:
-		basic_func.check_exist(trj_file, 2)
-	basic_func.check_exist(args.top, 2)
-
-	if args.flag_overwrite == False:
-		basic_func.check_overwrite(args.prmtop)
-
-	convert_trajectory(args.top, args.tpr, args.trr, args.prmtop, args.nc, args.flag_overwrite, args.center_mask, args.strip_mask, args.begin, args.end)
