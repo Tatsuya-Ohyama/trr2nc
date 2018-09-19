@@ -89,7 +89,6 @@ class NDXFile:
 		"""
 		with open(output_file, "w") as obj_output:
 			for list_def in self._defs:
-				print(list_def[0])
 				obj_output.write("[ {0} ]\n".format(list_def[0]))
 				list_def[1] = ["{0:>4d}".format(x + 1) for x in list_def[1]]
 				list_range = [0, 15]
