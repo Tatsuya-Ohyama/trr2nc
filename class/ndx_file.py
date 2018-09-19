@@ -42,13 +42,23 @@ class NDXFile:
 
 	def add_def(self, name, amber_mask):
 		"""
-		原子群を定義するメソッド
+		原子群を定義を追加するメソッド
 		@param name: 定義名
 		@param amber_mask: 定義する原子の AmberMask
 		@return self
 		"""
 		self._obj_mol.set_mask(amber_mask)
 		self._defs.append([name, self._obj_mol.get_info("atom", "atom_index")])
+		return self
+
+
+	def del_def(self, index):
+		"""
+		原子群の定義を削除するメソッド
+		@param index: 原子群の定義のインデックス
+		@return self
+		"""
+		del(self._defs[index])
 		return self
 
 
