@@ -16,7 +16,8 @@ from termcolor import colored
 
 from basic_func import check_exist, check_overwrite
 from molecule_topology import MoleculeTopology
-from classes.ndx_file import NDXFile
+from ndx_file import NDXFile
+
 
 # =============== functions =============== #
 def check_command(command_name):
@@ -154,6 +155,7 @@ if __name__ == '__main__':
 	trajectories = " ".join(args.trr)
 	command = "{command} trjconv -s {tpr} -f {trajectory} -o {output} -pbc res -ur compact".format(command = command_gmx, tpr = tpr, trajectory = temp_traj1, output = temp_traj2)
 
+
 	if args.center_mask is None:
 		command += " << 'EOF'\n0\nEOF"
 	else:
@@ -171,7 +173,7 @@ if __name__ == '__main__':
 	sys.stderr.write(colored("INFO: Creating prmtop ({file})\n".format(file = args.prmtop), "red", attrs = ["bold"]))
 	if args.flag_overwrite == False:
 		check_overwrite(prmtop)
-	obj_top.save_file(args.prmtop)
+	obj_top.set_mask("*").save_file(args.prmtop)
 
 
 	# nc ファイルに変換
