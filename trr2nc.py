@@ -56,11 +56,12 @@ if __name__ == '__main__':
 	parser.add_argument("-o", dest = "nc", metavar = "OUTPUT.<nc|mdcrd>", required = True, help = "output for Amber trajectory (.nc)")
 	parser.add_argument("-t", dest = "top", metavar = "INPUT.top", required = True, help = "Gromacs topology file when prmtop does not exist")
 	parser.add_argument("-p", dest = "prmtop", metavar = "OUTPUT.prmtop", required = True, help = "Amber topology file")
-	parser.add_argument("-sc", dest = "temp_dir", metavar = "TEMP_DIR", default = ".", help = "temporary directory (Default: current dir)")
+	parser.add_argument("-sc", dest = "temp_dir", metavar = "TEMP_DIR", default = ".", help = "Temporary directory (Default: current dir)")
 
 	gmx_option = parser.add_argument_group("gromacs option")
 	gmx_option.add_argument("-b", dest = "begin", metavar = "START_TIME", type = int, help = "First frame (ps) to read from trajectory (start from 0)")
 	gmx_option.add_argument("-e", dest = "end", metavar = "END_TIME", type = int, help = "Last frame (ps) to read from trajectory (start from 0)")
+	gmx_option.add_argument("--offset", dest = "offset", metavar = "OFFSET", type = int, default = 1, help = "Output interval (Default: 1)")
 
 	cpptraj_option = parser.add_argument_group("cpptraj option")
 	cpptraj_option.add_argument("-mc", dest = "center_mask", metavar = "CENTER_MASK", help = "center mask for cpptraj")
@@ -95,7 +96,7 @@ if __name__ == '__main__':
 
 	tpr = args.tpr
 	trajectories = " ".join(args.trr)
-	command = "{command} trjconv -s {tpr} -f {trajectory} -o {output} -pbc nojump".format(command = command_gmx, tpr = tpr, trajectory = trajectories, output = temp_traj1)
+	command = "{command} trjconv -s {tpr} -f {trajectory} -o {output} -pbc nojump -skip {offset}".format(command = command_gmx, tpr = tpr, trajectory = trajectories, output = temp_traj1, offset = args.offset)
 	if args.begin is not None:
 		command += " -b {0}".format(args.begin)
 	if args.end is not None:
