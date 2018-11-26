@@ -6,17 +6,20 @@ trr2nc
 Convert Gromacs trajectory (.trr) to AMBER trajectory (.nc)
 """
 
-import sys, os, re, signal
+import sys, os, signal
 signal.signal(signal.SIGINT, signal.SIG_DFL)
 
 import argparse
 import subprocess
 import tempfile
 from termcolor import colored
+import netCDF4
+from tqdm import tqdm
 
 from basic_func import check_exist, check_overwrite
 from molecule_topology import MoleculeTopology
-from file_NDX import NDXFile
+from file_NDX import FileNDX
+from file_GRO import FileGRO
 
 
 # =============== functions =============== #
@@ -52,8 +55,8 @@ if __name__ == '__main__':
 	parser = argparse.ArgumentParser(description = "trr2nc.py - Convert trr to nc with treating PBC", formatter_class=argparse.RawTextHelpFormatter)
 
 	parser.add_argument("-s", dest = "tpr", metavar = "INPUT.tpr", required = True, help = "Gromacs run input file")
-	parser.add_argument("-x", dest = "trr", metavar = "INPUT.<trr|xtc|gro>", required = True, nargs = "+", help = "Gromacs trajectory file")
-	parser.add_argument("-o", dest = "nc", metavar = "OUTPUT.<nc|mdcrd>", required = True, help = "output for Amber trajectory (.nc)")
+	parser.add_argument("-x", dest = "trr", metavar = "INPUT.<trr|xtc|gro>", required = True, help = "Gromacs trajectory file")
+	parser.add_argument("-o", dest = "output", metavar = "OUTPUT.<nc|mdcrd>", required = True, help = "output for Amber trajectory (.nc)")
 	parser.add_argument("-t", dest = "top", metavar = "INPUT.top", required = True, help = "Gromacs topology file when prmtop does not exist")
 	parser.add_argument("-p", dest = "prmtop", metavar = "OUTPUT.prmtop", required = True, help = "Amber topology file")
 	parser.add_argument("-sc", dest = "temp_dir", metavar = "TEMP_DIR", default = ".", help = "Temporary directory (Default: current dir)")
@@ -71,126 +74,126 @@ if __name__ == '__main__':
 
 	args = parser.parse_args()
 
+
 	check_exist(args.tpr, 2)
-	for trj_file in args.trr:
-		check_exist(trj_file, 2)
+	check_exist(args.trr, 2)
 	check_exist(args.top, 2)
-
-
 	command_gmx = check_command("gmx")
+	command_cpptraj = check_command("cpptraj")
+
 
 	# 一時ファイル名の決定
 	tempfile_name = ""
-	with tempfile.NamedTemporaryFile(mode = "w", prefix = ".trr2nc_", dir = args.temp_dir) as obj_temp:
-		tempfile_name = obj_temp.name
+	with tempfile.NamedTemporaryFile(mode = "w", prefix = ".trr2nc_", dir = args.temp_dir) as obj_output:
+		tempfile_name = obj_output.name
+	delete_files = []
+
+
+	# 出力が GRO の場合
+	gro_temp = None
+	if os.path.splitext(args.output)[1] == ".gro":
+		gro_temp = tempfile_name + ".gro"
+		delete_files.append(gro_temp)
 
 
 	# トポロジーファイルの読み込み
+	sys.stderr.write(colored("INFO: Loading topology file ... ", "red", attrs = ["bold"]), )
+	sys.stderr.flush()
 	obj_top = MoleculeTopology(args.top)
+	sys.stderr.write(colored("done\n", "red", attrs = ["bold"]))
 
 
-	# 周期境界でジャンプしないトラジェクトリの作成
-	temp_traj1 = tempfile_name + "1.trr"
-	temp_ndx = tempfile_name + ".ndx"
-	sys.stderr.write(colored("Creating nojump trajectory ({file})\n".format(file = temp_traj1), "red", attrs = ["bold"]))
+	# トラジェクトリファイルの変換 (xtc, gro -> trr)
+	trr_input = args.trr
+	nc_output = args.output
+	if os.path.splitext(args.trr)[1] in [".gro", ".xtc"]:
+		gmx_arg_opt = ["-s", "-f", "-o", "-b", "-e", "-skip", "-pbc", "-n", ""]
+		gmx_arg_var = [args.tpr, args.trr, None, None, None, args.offset, "whole", None, None]	# [-s, -f, -o, -b, -e, -skip, -n, option]
+		trr_output = tempfile_name + ".trr"
+		gmx_arg_var[2] = trr_output
+		delete_files.append(trr_output)
+		sys.stderr.write(colored("INFO: Start convert trajectory file ... \n    {0} -> {1}\n".format(trr_input, trr_output), "red", attrs = ["bold"]))
+		# command = "{command} trjconv -s {tpr} -f {trajectory} -o {output} -skip {offset}".format(command = command_gmx, tpr = args.tpr, trajectory = args.trr, output = temp_trr, offset = args.offset)
 
-	tpr = args.tpr
-	trajectories = " ".join(args.trr)
-	command = "{command} trjconv -s {tpr} -f {trajectory} -o {output} -pbc nojump -skip {offset}".format(command = command_gmx, tpr = tpr, trajectory = trajectories, output = temp_traj1, offset = args.offset)
-	if args.begin is not None:
-		command += " -b {0}".format(args.begin)
-	if args.end is not None:
-		command += " -e {0}".format(args.end)
+		if args.begin is not None:
+			gmx_arg_var[3] = args.begin
+		if args.end is not None:
+			gmx_arg_var[4] = args.end
 
-	obj_ndx = NDXFile(obj_top)
-	if args.strip_mask is None:
-		# strip_mask が指定されていない場合
-		obj_ndx.output_ndx(temp_ndx)
-		command += " -n {0} << 'EOF'\n0\nEOF".format(temp_ndx)
-	else:
-		# strip_mask が指定されていた場合
-		# ndx ファイルの作成
-		obj_ndx.add_def("Strip", "!" + args.strip_mask).output_ndx(temp_ndx)
-		obj_ndx.del_def(1)
-		command += " -n {0} << 'EOF'\n1\nEOF".format(temp_ndx)
+		obj_ndx = FileNDX(obj_top)
+		ndx = tempfile_name + ".ndx"
+		delete_files.append(ndx)
+		gmx_arg_var[7] = ndx
+		if args.strip_mask is None:
+			# strip_mask が指定されていない場合
+			obj_ndx.output_ndx(ndx)
+			gmx_arg_var[8] = "<< 'EOF'\n0\nEOF"
+		else:
+			# strip_mask が指定されていた場合、ndx ファイルの作成
+			obj_ndx.add_def("Strip", "!" + args.strip_mask).output_ndx(ndx)
+			gmx_arg_var[8] = "<< 'EOF'\n1\nEOF"
+			obj_top.set_mask("!" + args.strip_mask, flag_destructive = True)
 
+		command = " ".join([command_gmx, "trjconv"] + ["{0} {1}".format(o, v) for o, v in zip(gmx_arg_opt, gmx_arg_var) if v is not None])
+		exec_sp(command, True)
+		trr_input = trr_output
 
-		# 次の中央配置のための準備
-		# grompp 用の構造ファイルの作成 (strip 済み)
-		ref_coord = tempfile_name + "_ref.gro"
-		command_sub = "{command} trjconv -s {input_tpr} -f {trajectory} -o {ref_coord} -n {ndx} -b 1 -e 1 << 'EOF'\n1\nEOF".format(command = command_gmx, trajectory = trajectories, input_tpr = args.tpr, ndx = temp_ndx, ref_coord = ref_coord)
-		exec_sp(command_sub, False)
+		# GRO ファイルが出力の場合
+		if gro_temp is not None:
+			nc_output = tempfile_name + ".nc"
+			delete_files.append(nc_output)
+			gmx_arg_var[2] = gro_temp
+			gmx_arg_var[3] = 0
+			gmx_arg_var[4] = 1
+			command = " ".join([command_gmx, "trjconv"] + ["{0} {1}".format(o, v) for o, v in zip(gmx_arg_opt, gmx_arg_var) if v is not None])
+			exec_sp(command, False)
 
-		# strip したトポロジーの作成
-		temp_top = tempfile_name + ".top"
-		obj_top.set_mask("!" + args.strip_mask, True)
-		obj_top.save_file(temp_top)
-
-		# ndx ファイルの更新
-		obj_ndx = NDXFile(obj_top)
-
-		# grompp 用の mdp ファイルの作成
-		temp_mdp1 = tempfile_name + "1.mdp"
-		temp_mdp2 = tempfile_name + "2.mdp"
-		with open(temp_mdp1, "w") as obj_output:
-			obj_output.write("integrator = steep\n emtol = 1000.0\n emstep = 0.01\n nsteps = 50000\n nstlist = 100\n ns_type = grid\n rlist = 1.0\n coulombtype = PME\n rcoulomb = 1.0\n nstlog = 1 \n pbc = xyz\n vdwtype = cut-off\n constraints = none\n cutoff-scheme = Verlet\n")
-
-		# tpr の作成
-		temp_tpr = tempfile_name + ".tpr"
-		command_sub = "{command} grompp -f {temp_mdp1} -c {ref_coord} -p {temp_top} -o {temp_tpr} -po {temp_mdp2} -maxwarn 10".format(command = command_gmx, temp_mdp1 = temp_mdp1, ref_coord = ref_coord, temp_top = temp_top, temp_tpr = temp_tpr, temp_mdp2 = temp_mdp2)
-		exec_sp(command_sub, False)
-
-		# 後処理
-		tpr = temp_tpr
-		os.remove(ref_coord)
-		os.remove(temp_top)
-		os.remove(temp_mdp1)
-		os.remove(temp_mdp2)
-
-	exec_sp(command, True)
-
-
-	# 分子を中央に配置したトラジェクトリの作成
-	temp_traj2 = tempfile_name + "2.trr"
-	sys.stderr.write(colored("INFO: Creating centered trajectory ({file})\n".format(file = temp_traj2), "red", attrs = ["bold"]))
-	trajectories = " ".join(args.trr)
-	command = "{command} trjconv -s {tpr} -f {trajectory} -o {output} -pbc res -ur compact".format(command = command_gmx, tpr = tpr, trajectory = temp_traj1, output = temp_traj2)
-
-
-	if args.center_mask is None:
-		command += " << 'EOF'\n0\nEOF"
-	else:
-		obj_ndx = NDXFile(obj_top).add_def("Center", args.center_mask).output_ndx(temp_ndx)
-		command += " -center -n {ndx} << 'EOF'\n1\n0\nEOF".format(ndx = temp_ndx)
-	exec_sp(command, True)
-
-	os.remove(temp_traj1)
-	if args.strip_mask is not None:
-		os.remove(tpr)
-	os.remove(temp_ndx)
+		sys.stderr.write(colored("INFO: Finished creating trajectory file\n", "red", attrs = ["bold"]))
 
 
 	# prmtop の作成
-	sys.stderr.write(colored("INFO: Creating prmtop ({file})\n".format(file = args.prmtop), "red", attrs = ["bold"]))
+	sys.stderr.write(colored("INFO: Creating prmtop ({file}) ... ".format(file = args.prmtop), "red", attrs = ["bold"]))
+	sys.stderr.flush()
 	if args.flag_overwrite == False:
-		check_overwrite(prmtop)
-	obj_top.set_mask("*").save_file(args.prmtop)
+		check_overwrite(args.prmtop)
+	obj_top.save_file(args.prmtop)
+	sys.stderr.write(colored("done\n".format(file = args.prmtop), "red", attrs = ["bold"]))
 
 
 	# nc ファイルに変換
 	if args.flag_overwrite == False:
-		check_overwrite(args.nc)
-
+		check_overwrite(output_nc)
 	temp_in = tempfile_name + ".in"
-	sys.stderr.write(colored("INFO: Converting AMBER trajectory ({file})\n".format(file = args.nc), "red", attrs = ["bold"]))
+	delete_files.append(temp_in)
+	sys.stderr.write(colored("INFO: Converting AMBER trajectory ({file})\n".format(file = args.output), "red", attrs = ["bold"]))
 	with open(temp_in, "w") as obj_output:
 		obj_output.write("parm {0}\n".format(args.prmtop))
-		obj_output.write("trajin {0}\n".format(temp_traj2))
-		obj_output.write("trajout {0}\n".format(args.nc))
+		obj_output.write("trajin {0}\n".format(trr_input))
+		if args.center_mask:
+			obj_output.write("center {0} mass origin\n".format(args.center_mask))
+			obj_output.write("rms {0} first mass\n".format(args.center_mask))
+		obj_output.write("autoimage\n")
+		obj_output.write("trajout {0}\n".format(nc_output))
 		obj_output.write("go\n")
-
-	command_cpptraj = check_command("cpptraj")
 	exec_sp("{0} -i {1}".format(command_cpptraj, temp_in), True)
 
-	os.remove(temp_traj2)
-	os.remove(temp_in)
+
+	# GRO ファイルへの変換
+	if gro_temp is not None:
+		sys.stderr.write(colored("INFO: Converting .nc to .gro. ... ", "red", attrs = ["bold"]))
+		sys.stderr.flush()
+		obj_gro = FileGRO(gro_temp)
+		trr = netCDF4.Dataset(nc_output)
+		for frame_idx in tqdm(range(len(trr.dimensions["frame"])), ascii = True, leave = False):
+			coord = [(x / 10).round(3).tolist() for x in trr.variables["coordinates"][frame_idx]]
+			obj_gro.add_frame(coord)
+
+		if args.flag_overwrite == False:
+			check_overwrite(args.output)
+		obj_gro.output_gro(args.output)
+		sys.stderr.write(colored("done.\n", "red", attrs = ["bold"]))
+
+
+	# 一時ファイルの削除
+	for file in delete_files:
+		os.remove(file)
