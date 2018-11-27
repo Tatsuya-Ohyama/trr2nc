@@ -170,6 +170,7 @@ if __name__ == '__main__':
 		obj_output.write("parm {0}\n".format(args.prmtop))
 		obj_output.write("trajin {0}\n".format(trr_input))
 		if args.center_mask:
+			obj_output.write("unwrap {0}\n".format(args.center_mask))
 			obj_output.write("center {0} mass origin\n".format(args.center_mask))
 			obj_output.write("rms {0} first mass\n".format(args.center_mask))
 		obj_output.write("autoimage\n")
