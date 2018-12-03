@@ -120,6 +120,7 @@ if __name__ == '__main__':
 		if args.end is not None:
 			gmx_arg_var[4] = args.end
 
+
 		obj_ndx = FileNDX(obj_top)
 		ndx = tempfile_name + ".ndx"
 		delete_files.append(ndx)
@@ -144,7 +145,7 @@ if __name__ == '__main__':
 			delete_files.append(nc_output)
 			gmx_arg_var[2] = gro_temp
 			gmx_arg_var[3] = 0
-			gmx_arg_var[4] = 1
+			gmx_arg_var[4] = 0
 			command = " ".join([command_gmx, "trjconv"] + ["{0} {1}".format(o, v) for o, v in zip(gmx_arg_opt, gmx_arg_var) if v is not None])
 			exec_sp(command, False)
 
@@ -187,7 +188,10 @@ if __name__ == '__main__':
 		trr = netCDF4.Dataset(nc_output)
 		for frame_idx in tqdm(range(len(trr.dimensions["frame"])), ascii = True, leave = False):
 			coord = [(x / 10).round(3).tolist() for x in trr.variables["coordinates"][frame_idx]]
-			obj_gro.add_frame(coord)
+			if frame_idx == 0:
+				obj_gro.set_data(frame_idx, "coord", coord)
+			else:
+				obj_gro.add_frame(coord)
 
 		if args.flag_overwrite == False:
 			check_overwrite(args.output)
