@@ -76,7 +76,7 @@ if __name__ == '__main__':
 	parser.add_argument("-t", dest = "top", metavar = "INPUT.top", required = True, help = "Gromacs topology file when prmtop does not exist")
 	parser.add_argument("-p", dest = "prmtop", metavar = "OUTPUT.prmtop", required = True, help = "Amber topology file")
 	parser.add_argument("-sc", dest = "temp_dir", metavar = "TEMP_DIR", default = ".", help = "Temporary directory (Default: current dir)")
-	parser.add_argument("--separate-mol", dest = "separate_mol", metavar = "MOL_NAME", nargs = "+", help = "separate molecules into individual molecules (periodic boundary condition problem)")
+	parser.add_argument("--separate-mol", dest = "separate_mol", metavar = "MOL_NAME", nargs = "+", default = [], help = "separate molecules into individual molecules (periodic boundary condition problem)")
 
 	gmx_option = parser.add_argument_group("gromacs option")
 	gmx_option.add_argument("-b", dest = "begin", metavar = "START_TIME", type = int, help = "First frame (ps) to read from trajectory (start from 0)")
@@ -236,8 +236,8 @@ if __name__ == '__main__':
 	with open(temp_in, "w") as obj_output:
 		obj_output.write("parm {0}\n".format(args.prmtop))
 		obj_output.write("trajin {0}\n".format(trr_input))
-		obj_output.write("autoimage\n")
 		if args.center_mask:
+			obj_output.write("autoimage\n")
 			obj_output.write("unwrap {0}\n".format(args.center_mask))
 			obj_output.write("center {0} mass origin\n".format(args.center_mask))
 			obj_output.write("rms {0} first mass\n".format(args.center_mask))
