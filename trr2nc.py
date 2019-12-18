@@ -229,7 +229,7 @@ if __name__ == '__main__':
 
 	# nc ファイルに変換
 	if args.flag_overwrite == False:
-		check_overwrite(output_nc)
+		check_overwrite(nc_output)
 	temp_in = tempfile_name + ".in"
 	delete_files.append(temp_in)
 	sys.stderr.write(colored("INFO: Converting AMBER trajectory ({file})\n".format(file = args.output), LOG_COLOR, attrs = ["bold"]))
