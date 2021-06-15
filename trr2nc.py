@@ -27,14 +27,16 @@ from termcolor import colored
 import netCDF4
 from tqdm import tqdm
 
-from basic_func import check_exist, check_overwrite
-from molecule_topology import MoleculeTopology
-from file_NDX import FileNDX
-from file_GRO import FileGRO
+from mods.func_prompt_io import *
+from mods.molecule_topology import MoleculeTopology
+from mods.file_NDX import FileNDX
+from mods.file_GRO import FileGRO
+
 
 
 # =============== variable =============== #
 LOG_COLOR = "yellow"
+
 
 
 # =============== functions =============== #
