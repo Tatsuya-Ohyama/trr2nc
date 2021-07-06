@@ -4,7 +4,7 @@
 import sys
 import pickle
 
-from molecule_topology import MoleculeTopology
+from mods.molecule_topology import MoleculeTopology
 
 
 # =============== class =============== #
