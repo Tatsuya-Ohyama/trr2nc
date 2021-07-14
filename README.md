@@ -47,8 +47,12 @@ $ trr2nc.py [-h] -s INPUT.tpr -x INPUT.<trr|xtc|gro> -o OUTPUT.<nc|mdcrd> -t INP
 ## 動作要件
 * Python3
 	* netCDF4
-	* tqdm
+	* numpy
+	* parmed
+	* pathlib
+	* pickle
 	* termcolor
+	* tqdm
 
 
 ## License
@@ -60,6 +64,8 @@ This software is released under the MIT License, see LICENSE.
 
 
 ## ChangeLog
+* Ver. 17.9 (2021-07-14)
+	* モジュール内のスタイルも PEP8 スタイルに変更した。
 * Ver. 17.8 (2021-07-14)
 	* PEP8 スタイルに変更した。
 	* mercurial から git に変更した。

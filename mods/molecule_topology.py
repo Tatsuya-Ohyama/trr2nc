@@ -11,20 +11,12 @@ import parmed
 import numpy as np
 from pathlib import Path
 import copy
-import pickle
 
 
 
 # =============== classes =============== #
-# --------------- MoleculeTopology --------------- #
 class MoleculeTopology:
-	"""
-	分子トポロジークラス
-	@param topology_file: トポロジーファイル
-	@mask: 有効化マスク
-	"""
-	def __init__(self, topology_file = None, mask = "*", flag_destructive = False):
-		# メンバ変数
+	def __init__(self, topology_file=None, mask="*", flag_destructive=False):
 		self._obj_topology = None
 		self._mask = None
 		self._file_type = None
@@ -32,17 +24,42 @@ class MoleculeTopology:
 		self._list_target_atom = None
 		self._residue_info = []
 
-		# 初期化処理
+		# init
 		self.load_topology(topology_file)
 		self.set_mask(mask, flag_destructive)
 
 
+	@property
+	def molecule(self):
+		return self._obj_topology
+
+	@property
+	def atoms(self):
+		return self._obj_topology.atoms
+
+	@property
+	def residues(self):
+		return self._obj_topology.residues
+
+	@property
+	def mask(self):
+		return self._mask
+
+	@mask.deleter
+	def mask(self):
+		self._mask = None
+		return self
+
 
 	def load_topology(self, topology_file):
 		"""
-		ファイルを読み込むメソッド
-		@param topology_file: トポロジーファイル
-		@return self
+		Method to read file
+
+		Args:
+			topology_file (str): topology file
+
+		Returns:
+			self
 		"""
 		if topology_file is not None:
 			if ".top" in topology_file:
@@ -68,12 +85,16 @@ class MoleculeTopology:
 		return self
 
 
-	def set_mask(self, mask = None, flag_destructive = False):
+	def set_mask(self, mask=None, flag_destructive=False):
 		"""
-		マスクを設定するメソッド
-		@param mask: AmberMask for enable
-		@param flag_destructive: マスク内容をオブジェクトにも適用する (破壊的メソッド) (Default: False)
-		@return: self
+		Method to set Ambermask
+
+		Args:
+			mask (str, optional): Ambermask (Default: None)
+			flag_destructive (bool, optional): use destructive method (Default: False)
+
+		Returns:
+			self
 		"""
 		if self._obj_topology is not None:
 			self._mask = mask
@@ -90,7 +111,10 @@ class MoleculeTopology:
 
 	def _make_residue_info(self):
 		"""
-		キャッシュデータを作成するメソッド
+		Method to create cache for residue information
+
+		Returns:
+			self
 		"""
 		if len(self._residue_info) == 0:
 			# 残基情報を登録
@@ -112,34 +136,41 @@ class MoleculeTopology:
 
 
 	def _clear_residue_info(self):
-		""" キャッシュデータを削除するメソッド """
+		"""
+		Method to delete cache data for residue information
+
+		Returns:
+			self
+		"""
 		self._residue_info = []
 		return self
 
 
 	def get_file_type(self):
 		"""
-		読み込んだファイルタイプを返すメソッド
-		@return: file_type
+		Method to return file type
+
+		Returns:
+			str: file type
 		"""
 		return self._file_type
 
 
 	@property
 	def file_type(self):
-		"""
-		読み込んだファイルタイプを返すメソッド
-		@return: file_type
-		"""
 		return self.get_file_type()
 
 
 	def get_info(self, target, info_type):
 		"""
-		登録情報を返すメソッド
-		@param target: 返す情報の対象 ("atom" or "residue")
-		@param info_type: 返す情報 ("atom_index", "atom_name", "element", "charge", "mass", "residue_index", or "residue_name")
-		@return 指定された情報はリストで返される
+		Method to return molecular information
+
+		Args:
+			target (str): `atom` or `residue`
+			info_type (str): `atom_index`, `atom_name`, `element`, `charge`, `mass`, `residue_index` or `residue_name`
+
+		Returns:
+			list
 		"""
 		if target == "atom":
 			# 原子情報を返す
@@ -220,11 +251,15 @@ class MoleculeTopology:
 
 	def convert_index2name(self, target_type_src, info_type_dst, info_value):
 		"""
-		原子および残基のインデックスをそれぞれの名前や元素で返すメソッド
-		@param target_type_src: 変換したい情報タイプ ("atom_index" or "residue_name")
-		@param info_type_dst: 変換後の情報タイプ ("atom_name", "element", or "residue_name")
-		@param info_value[]: 変換したいインデックス
-		@return 変換後の情報[]
+		Method to convert atom or residue indexes to their names or elements
+
+		Args:
+			target_type_src (str): `atom_index` or `residue_index`
+			info_type_dst (str):  `atom_name`, `element` or `residue_name`
+			info_value (list): indexes
+
+		Returns:
+			list
 		"""
 		if not isinstance(info_value, list):
 			# データをすべてリストに変換
@@ -261,9 +296,13 @@ class MoleculeTopology:
 
 	def save_file(self, output_file):
 		"""
-		ファイルとして保存するメソッド
-		@param output_file: 出力ファイルパス
-		@return self
+		Method to output molecular file
+
+		Args:
+			output_file (str): output file
+
+		Returns:
+			self
 		"""
 		output_path = Path(output_file)
 		if output_path.exists():
@@ -281,55 +320,3 @@ class MoleculeTopology:
 			self._obj_topology.save(output_file)
 
 		return self
-
-
-	@property
-	def molecule(self):
-		"""
-		parmed オブジェクトを返すメソッド
-		@retrun obj_topology
-		"""
-		return self._obj_topology
-
-
-	@property
-	def atoms(self):
-		"""
-		parmed の原子オブジェクトリストを返すメソッド
-		@return obj_atoms(list)
-		"""
-		return self._obj_topology.atoms
-
-
-	@property
-	def residues(self):
-		"""
-		parmed の残基オブジェクトを返すメソッド
-		@return obj_residues(list)
-		"""
-		return self._obj_topology.residues
-
-
-	@property
-	def mask(self):
-		"""
-		mask を返すメソッド
-		@return mask
-		"""
-		return self._mask
-
-
-	@mask.deleter
-	def mask(self):
-		"""
-		mask をリセットするメソッド
-		@return self
-		"""
-		self._mask = None
-		return self
-
-
-
-# =============== main =============== #
-# if __name__ == '__main__':
-#	pass
