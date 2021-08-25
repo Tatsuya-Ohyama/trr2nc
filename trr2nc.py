@@ -233,9 +233,10 @@ if __name__ == '__main__':
 			gmx_arg_var[8] = "<< 'EOF'\n0\nEOF"
 		else:
 			# when strip_mask is specified, create .ndx file
-			obj_ndx.add_def("Strip", "!" + args.STRIP_MASK).output_ndx(ndx)
+			mask = "!({0})".format(args.STRIP_MASK)
+			obj_ndx.add_def("Strip", mask).output_ndx(ndx)
 			gmx_arg_var[8] = "<< 'EOF'\n1\nEOF"
-			obj_top.set_mask("!" + args.STRIP_MASK, flag_destructive=True)
+			obj_top.set_mask(mask)
 
 		command = " ".join([command_gmx, "trjconv"] + ["{0} {1}".format(o, v) for o, v in zip(gmx_arg_opt, gmx_arg_var) if v is not None])
 		exec_sp(command, True)
