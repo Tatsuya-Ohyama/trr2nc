@@ -104,7 +104,7 @@ class MoleculeTopology:
 				self._make_residue_info()
 
 				if flag_destructive:
-					self._obj_topology.strip("!(" + mask + ")")
+					self._obj_topology.strip("!({0})".format(mask))
 
 		return self
 
@@ -311,7 +311,7 @@ class MoleculeTopology:
 		if self._mask is not None:
 			# マスクがある場合
 			obj_topology = copy.copy(self._obj_topology)
-			strip_mask = parmed.amber.AmberMask(obj_topology, "!(" + self._mask + ")")
+			strip_mask = parmed.amber.AmberMask(obj_topology, "!({0})".format(self._mask))
 			obj_topology.strip(strip_mask)
 			obj_topology.save(output_file)
 
