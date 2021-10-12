@@ -2,7 +2,6 @@
 # -*- coding: utf-8 -*-
 
 import sys
-import pickle
 import re
 import copy
 
@@ -216,27 +215,6 @@ class FrameGRO:
 		self._atom = 0
 		self._atom_info = []
 		self._cell = []
-
-
-	def save_pickle(self, output_file):
-		"""
-		Pickle ファイルに保存するメソッド
-		@param output_file: 出力する pickle ファイルのパス
-		@return: 自身を返す (チェーンメソッドのため)"""
-		with open(output_file, "wb") as obj_output:
-			pickle.dump(self, obj_output)
-		return self
-
-
-	def restore_pickle(self, input_file):
-		"""
-		Pickle ファイルから復元するメソッド
-		@param input_file: pickle ファイルのパス
-		@return: 自身を返す (チェーンメソッドのため)
-		"""
-		with open(input_file, "rb") as obj_input:
-			self = pickle.load(obj_input)
-		return self
 
 
 	def set_title(self, title):
