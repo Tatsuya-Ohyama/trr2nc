@@ -6,17 +6,17 @@ Gromacs のトラジェクトリファイルを Amber のトラジェクトリ�
 
 ## 使用方法
 ```sh
-$ trr2nc.py [-h] -s INPUT.tpr -x INPUT.<trr|xtc|gro> -o OUTPUT.<nc|mdcrd> -t INPUT.top -p OUTPUT.prmtop [-sc TEMP_DIR] [--separate-mol MOL_NAME [MOL_NAME ...]] [-b START_TIME] [-e END_TIME] [--offset OFFSET] [-mc CENTER_MASK] [-ms STRIP_MASK] [-O]
+$ trr2nc.py [-h] -s INPUT.tpr -x INPUT.<trr|xtc|gro> -o OUTPUT.<nc|mdcrd|xtc> -t INPUT.top -p OUTPUT.prmtop [-sc TEMP_DIR] [--separate-mol MOL_NAME [MOL_NAME ...]] [-b START_TIME] [-e END_TIME] [--offset OFFSET] [-mc CENTER_MASK] [-ms STRIP_MASK] [-O]
 ```
 
-* optional arguments:
+* Basic options:
 	* `-h`, `--help`
 		: ヘルプメッセージを表示して終了する。
 	* `-s INPUT.tpr`
 		: Gromacs の .tpr ファイル (Input)
 	* `-x INPUT.<trr|xtc|gro>`
 		: Gromacs のトラジェクトリファイル (Input)
-	* `-o OUTPUT.<nc|mdcrd>`
+	* `-o OUTPUT.<nc|mdcrd|xtc>`
 		: Amber のトラジェクトリファイル (Output)
 	* `-t INPUT.top`
 		: Gromacs のトポロジーファイル (Input)
@@ -29,7 +29,7 @@ $ trr2nc.py [-h] -s INPUT.tpr -x INPUT.<trr|xtc|gro> -o OUTPUT.<nc|mdcrd> -t INP
 	* `-O`
 		: プロンプトを出さずに上書きする。
 
-* gromacs option:
+* Gromacs option:
 	* `-b START_TIME`
 		: 読み込み開始フレームインデックス (start from 0)
 	* `-e END_TIME`
@@ -49,8 +49,6 @@ $ trr2nc.py [-h] -s INPUT.tpr -x INPUT.<trr|xtc|gro> -o OUTPUT.<nc|mdcrd> -t INP
 	* netCDF4
 	* numpy
 	* parmed
-	* pathlib
-	* pickle
 	* termcolor
 	* tqdm
 
@@ -64,6 +62,9 @@ This software is released under the MIT License, see LICENSE.
 
 
 ## ChangeLog
+* Ver. 17.10 (2021-10-12)
+	* AmberTools 17 以降のインストール環境で、.xtc ファイルの出力および中間ファイルとして .xtc ファイルを出力するようにした。
+	* 使用モジュールを整理した。
 * Ver. 17.9 (2021-07-14)
 	* モジュール内のスタイルも PEP8 スタイルに変更した。
 * Ver. 17.8 (2021-07-14)

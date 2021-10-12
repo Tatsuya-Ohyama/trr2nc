@@ -3,16 +3,19 @@
 
 """
 trr2nc
-Convert Gromacs trajectory to AMBER trajectory
+Program to convert Gromacs trajectory to AMBER trajectory
 """
 
-import sys, os, signal
+import sys
+import signal
+import os
 import argparse
 import subprocess
 import tempfile
 from termcolor import colored
 import netCDF4
 from tqdm import tqdm
+import re
 
 from mods.func_prompt_io import *
 from mods.molecule_topology import MoleculeTopology
@@ -39,10 +42,11 @@ signal.signal(signal.SIGINT, delete_all)
 
 
 
-# =============== variable =============== #
+# =============== constant =============== #
 COMMAND_NAME_GMX = "gmx"
 COMMAND_NAME_CPPTRAJ = "cpptraj"
 LOG_COLOR = "yellow"
+RE_CPPTRAJ_VER = re.compile(r"CPPTRAJ: Version (V.+?) \(AmberTools (V.+?)\)")
 
 
 
@@ -72,6 +76,21 @@ def check_command(command_name):
 	command_path = stdout.rstrip("\r\n")
 
 	return command_path
+
+
+def get_cpptraj_ver(cpptraj_path):
+	"""
+	Function to get cpptraj and AmberTools versions
+
+	Args:
+		cpptraj_path (str): cpptraj path
+
+	Returns:
+		list: [cpptraj_ver, AmberTools_ver]
+	"""
+	obj_process = subprocess.run([cpptraj_path, "--version"], stdout=subprocess.PIPE, text=True)
+	obj_match = RE_CPPTRAJ_VER.search(obj_process.stdout)
+	return [obj_match.group(1), obj_match.group(2)]
 
 
 def exec_sp(command, operation=False):
@@ -104,11 +123,11 @@ def exec_sp(command, operation=False):
 
 # =============== main =============== #
 if __name__ == '__main__':
-	parser = argparse.ArgumentParser(description = "trr2nc.py - Convert trr to nc with treating PBC", formatter_class=argparse.RawTextHelpFormatter)
+	parser = argparse.ArgumentParser(description = "Program to convert Gromacs trajectory to AMBER trajectory", formatter_class=argparse.RawTextHelpFormatter)
 
 	parser.add_argument("-s", dest="TPR_FILE", metavar="INPUT.tpr", required=True, help="Gromacs run input file")
 	parser.add_argument("-x", dest="TRR_FILE", metavar="INPUT.<trr|xtc|gro>", required=True, help="Gromacs trajectory file")
-	parser.add_argument("-o", dest="OUTPUT_FILE", metavar="OUTPUT.<nc|mdcrd>", required=True, help="output for Amber trajectory (.nc)")
+	parser.add_argument("-o", dest="OUTPUT_FILE", metavar="OUTPUT.<nc|mdcrd|xtc>", required=True, help="output for Amber trajectory (.nc)")
 	parser.add_argument("-t", dest="TOP_FILE", metavar="INPUT.top", required=True, help="Gromacs topology file")
 	parser.add_argument("-p", dest="PRMTOP_FILE", metavar="OUTPUT.prmtop", required=True, help="Amber topology file")
 	parser.add_argument("-sc", dest="TEMP_DIR", metavar="TEMP_DIR", default=".", help="Temporary directory (Default: current dir)")
@@ -134,7 +153,12 @@ if __name__ == '__main__':
 	check_exist(args.TOP_FILE, 2)
 	command_gmx = check_command(COMMAND_NAME_GMX)
 	command_cpptraj = check_command(COMMAND_NAME_CPPTRAJ)
-
+	cpptraj_vers = get_cpptraj_ver(command_cpptraj)
+	ambertools_ver = int(cpptraj_vers[1][1:].split(".")[0])
+	if os.path.splitext(args.OUTPUT_FILE)[1].lower() == ".xtc":
+		if ambertools_ver <= 16:
+			sys.stderr.write("ERROR: output of .xtc file is only supported in AmberTools version 17.0 or later.\n")
+			sys.exit(1)
 
 	# determine name of temporary file
 	tempfile_name = ""
@@ -213,6 +237,8 @@ if __name__ == '__main__':
 		gmx_arg_opt = ["-s", "-f", "-o", "-b", "-e", "-skip", "-pbc", "-n", ""]
 		gmx_arg_var = [tpr, args.TRR_FILE, None, None, None, args.OFFSET, "mol", None, None]
 		trr_output = tempfile_name + ".trr"
+		if ambertools_ver >= 17:
+			trr_output = tempfile_name + ".xtc"
 		gmx_arg_var[2] = trr_output
 		delete_files.append(trr_output)
 		sys.stderr.write(colored("INFO: Start convert trajectory file ... \n    {0} -> {1}\n".format(trr_input, trr_output), LOG_COLOR, attrs=["bold"]))

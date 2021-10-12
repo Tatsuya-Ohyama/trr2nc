@@ -8,8 +8,6 @@ Molecule Topology class
 import sys
 import os
 import parmed
-import numpy as np
-from pathlib import Path
 import copy
 
 
@@ -304,9 +302,8 @@ class MoleculeTopology:
 		Returns:
 			self
 		"""
-		output_path = Path(output_file)
-		if output_path.exists():
-			output_path.unlink()
+		if os.path.exists(output_file):
+			os.remove(output_file)
 
 		if self._mask is not None:
 			# マスクがある場合
