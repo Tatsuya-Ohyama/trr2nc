@@ -11,7 +11,7 @@ import os
 
 
 # =============== function =============== #
-def check_overwrite(file):
+def check_overwrite(file, force=False):
 	"""
 	Function to check for overwrite
 
@@ -22,17 +22,18 @@ def check_overwrite(file):
 		None
 	"""
 	if os.path.exists(file):
-		# Warn if file exists
-		sys.stderr.write("WARN: %s exists. Overwrite it? (y/N): " % file)
-		sys.stderr.flush()
-		user = sys.stdin.readline().strip()
+		if not force:
+			# Warn if file exists
+			sys.stderr.write("WARN: %s exists. Overwrite it? (y/N): " % file)
+			sys.stderr.flush()
+			user = sys.stdin.readline().strip()
 
-		if user != "y":
-			# When there is no permission to overwrite
-			sys.exit(0)
-		else:
-			# If there is permission to overwrite, delete it in advance considering conflicts
-			os.remove(file)
+			if user != "y":
+				# When there is no permission to overwrite
+				sys.exit(0)
+
+		# If there is permission to overwrite, delete it in advance considering conflicts
+		os.remove(file)
 
 
 def check_exist(path, mode, flag_exit=True):

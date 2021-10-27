@@ -2,8 +2,15 @@
 # -*- coding: utf-8 -*-
 
 import sys
+import parmed
 
-from mods.molecule_topology import MoleculeTopology
+
+
+# =============== constant =============== #
+VAL_PER_ROW = 15
+VAL_LENGTH = 4
+VAL_FORMAT = "{0:>" + str(VAL_LENGTH) + "}"
+
 
 
 # =============== class =============== #
@@ -12,7 +19,8 @@ class FileNDX:
 	def __init__(self, obj_mol):
 		# member variables
 		self._obj_mol = obj_mol
-		self._defs = []
+		self._def_names = []
+		self._def_list = {}
 
 		# initiation
 		self.add_def("System", "*")
@@ -20,43 +28,69 @@ class FileNDX:
 
 	def add_def(self, name, amber_mask):
 		"""
-		原子群を定義を追加するメソッド
-		@param name: 定義名
-		@param amber_mask: 定義する原子の AmberMask
-		@return self
+		Method to define atom group
+
+		Args:
+			name(str): define name
+			amber_mask(str): AmberMask
+
+		Returns:
+			self
 		"""
-		self._obj_mol.set_mask(amber_mask)
-		self._defs.append([name, self._obj_mol.get_info("atom", "atom_index")])
+		obj_mask = parmed.amber.AmberMask(self._obj_mol, amber_mask)
+		self._def_names.append(name)
+		self._def_list[name] = [i + 1 for i in obj_mask.Selected()]
 		return self
 
 
-	def del_def(self, index):
+	def del_def(self, name):
 		"""
-		原子群の定義を削除するメソッド
-		@param index: 原子群の定義のインデックス
-		@return self
+		Method to delete defined atom group
+
+		Args:
+			name(str or int): name or index for atom group
+
+		Returns:
+			self
 		"""
-		del(self._defs[index])
+		if isinstance(name) == str:
+			del(self._def_list[name])
+			self._def_names.remove(name)
+
+		elif isinstance(name) == int:
+			del(self._def_list[self._def_names[name]])
+			del(self._def_names[name])
+
+		else:
+			sys.stderr.write("ERROR: undefined data type (str or int).\n")
+			sys.exit(1)
+
 		return self
 
 
-	def get_def(self, name = None):
+	def get_def(self, name=None):
 		"""
-		定義された原子群を表示するメソッド
-		@param name: 定義名 (Default: None)
-		@return 定義名と原子群のインデックスリスト
+		Method to return defined atom groups
+
+		Args:
+			name(str or int): name or index for atom group
+
+		Returns:
+			dict: defined name and list for atomic index
 		"""
-		if name is not None:
-			# 定義名がある場合
-			list_check = [i for i, x in enumerate(self._def) if x[0] == name]
-			if len(list_check) != 0:
-				return self._defs[list_check[0]]
+		if isinstance(name) == str:
+			if name in self._def_list.keys():
+				return self._def_list[name]
 			else:
 				sys.stderr.write("ERROR: Invalid define name.\n")
 				return False
+
+		elif isinstance(name) == int:
+			return self._def_list[self._def_names[name]]
+
 		else:
 			# 定義名がない場合
-			return self._defs
+			return self._def_list
 
 
 	def output_ndx(self, output_file):
@@ -66,17 +100,10 @@ class FileNDX:
 		@return: self
 		"""
 		with open(output_file, "w") as obj_output:
-			for list_def in self._defs:
-				obj_output.write("[ {0} ]\n".format(list_def[0]))
-				list_def[1] = ["{0:>4d}".format(x + 1) for x in list_def[1]]
-				list_range = [0, 15]
-				while list_range[0] < len(list_def[1]):
-					obj_output.write("{0}\n".format(" ".join([str(x) for x in list_def[1][list_range[0]:list_range[1]]])))
-					list_range = [x + 15 for x in list_range]
+			for name in self._def_names:
+				obj_output.write("[ {0} ]\n".format(name))
+				for i in range(0, len(self._def_list[name]), VAL_PER_ROW):
+					row = " ".join([VAL_FORMAT.format(v) for v in self._def_list[name][i:i+VAL_PER_ROW]])
+					obj_output.write("{0}\n".format(row))
 
 		return self
-
-
-# =============== main =============== #
-# if __name__ == '__main__':
-# 	main()
