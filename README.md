@@ -6,7 +6,7 @@ Gromacs のトラジェクトリファイルを Amber のトラジェクトリ�
 
 ## 使用方法
 ```sh
-$ trr2nc.py [-h] -s INPUT.tpr -x INPUT.<trr|xtc|gro> -o OUTPUT.<nc|mdcrd|xtc> -t INPUT.top -p OUTPUT.prmtop [-sc TEMP_DIR] [--separate-mol MOL_NAME [MOL_NAME ...]] [-b START_TIME] [-e END_TIME] [--offset OFFSET] [-mc CENTER_MASK] [-ms STRIP_MASK] [-O]
+$ trr2nc.py [-h] -s INPUT.tpr -x INPUT.<trr|xtc|gro> -o OUTPUT.<nc|mdcrd|xtc> -t INPUT.top -p OUTPUT.prmtop [-sc TEMP_DIR] [--separate-mol MOL_NAME [MOL_NAME ...]] [-b START_TIME] [-e END_TIME] [--offset OFFSET] [--gmx COMMAND_GMX] -mc CENTER_MASK [-ms STRIP_MASK] [--cpptraj COMMAND_CPPTRAJ] [-O]
 ```
 
 * Basic options:
@@ -36,21 +36,23 @@ $ trr2nc.py [-h] -s INPUT.tpr -x INPUT.<trr|xtc|gro> -o OUTPUT.<nc|mdcrd|xtc> -t
 		: 読み込み終了フレームインデックス (start from 0)
 	* `--offset OFFSET`
 		: 出力するフレームの間隔 (Default: 1)
+	* `--gmx COMMAND_GMX`
+		: `gmx` コマンドパス (Default: 自動検出)
 
 * cpptraj option:
 	* `-mc CENTER_MASK`
 		: トラジェクトリの中心に配置する原子群の Ambermask
 	* `-ms STRIP_MASK`
 		: トラジェクトリから削除する原子群の Ambermask
+	* `--cpptraj COMMAND_CPPTRAJ`
+		: `cpptraj` コマンドパス (Default: 自動検出)
 
 
 ## 動作要件
 * Python3
-	* netCDF4
 	* numpy
 	* parmed
 	* termcolor
-	* tqdm
 
 
 ## License
@@ -62,6 +64,9 @@ This software is released under the MIT License, see LICENSE.
 
 
 ## ChangeLog
+* Ver. 18.0 (2021-10-27)
+	* `cpptraj` と `gmx` コマンドを指定できるようにした。
+	* .xtc 出力時に構造がおかしくなる致命的なバグを修正した。
 * Ver. 17.10 (2021-10-12)
 	* AmberTools 17 以降のインストール環境で、.xtc ファイルの出力および中間ファイルとして .xtc ファイルを出力するようにした。
 	* 使用モジュールを整理した。
