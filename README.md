@@ -64,6 +64,8 @@ This software is released under the MIT License, see LICENSE.
 
 
 ## ChangeLog
+* Ver. 19.0 (2021-12-06)
+	* `-ms` オプションを指定した際に構造が崩れる致命的なバグを修正した。
 * Ver. 18.0 (2021-10-27)
 	* `cpptraj` と `gmx` コマンドを指定できるようにした。
 	* .xtc 出力時に構造がおかしくなる致命的なバグを修正した。

@@ -45,6 +45,22 @@ COMMAND_NAME_GMX = "gmx"
 COMMAND_NAME_CPPTRAJ = "cpptraj"
 LOG_COLOR = "yellow"
 RE_CPPTRAJ_VER = re.compile(r"CPPTRAJ: Version (V.+?) \(AmberTools (V.+?)\)")
+MDP_FILE = """
+integrator	= steep
+emtol		= 1000.0
+emstep		= 0.01
+nsteps		= 50000
+nstlist		= 100
+ns_type		= grid
+rlist		= 1.0
+coulombtype	= PME
+rcoulomb	= 1.0
+nstlog = 1
+pbc = xyz
+vdwtype = cut-off
+constraints = none
+cutoff-scheme = Verlet
+"""
 
 
 
@@ -118,6 +134,17 @@ def exec_sp(command, operation=False):
 		sys.exit(1)
 
 
+def output_mdp(output_file):
+	"""
+	.tpr ファイル作成のためのダミー .mdp ファイルを作成する関数
+
+	Args:
+		output_file (str)): 出力先
+	"""
+	with open(output_file, "w") as obj_output:
+		obj_output.write(MDP_FILE)
+
+
 
 # =============== main =============== #
 if __name__ == '__main__':
@@ -179,8 +206,11 @@ if __name__ == '__main__':
 	if os.path.splitext(args.TRAJECTORY_FILE)[1].lower() == ".nc" \
 		and os.path.splitext(args.OUTPUT_FILE)[1].lower() == ".nc":
 		max_process = 3
+	elif os.path.splitext(args.OUTPUT_FILE)[1].lower() == ".gro":
+		max_process = 11
 	else:
-		max_process = 6
+		max_process = 12
+
 
 	# read topology file
 	process_i += 1
@@ -188,20 +218,33 @@ if __name__ == '__main__':
 	obj_topol = parmed.gromacs.GromacsTopologyFile(args.TOP_FILE)
 
 
-	# create .prmtop file
-	process_i += 1
-	sys.stdout.write(colored("Process ({0}/{1}): {2} => {3}\n".format(process_i, max_process, "Generate prmtop", args.PRMTOP_FILE), LOG_COLOR, attrs=["bold"]))
-	check_overwrite(args.PRMTOP_FILE, args.FLAG_OVERWRITE)
-	if args.STRIP_MASK is not None:
-		obj_topol.strip(args.STRIP_MASK)
-	obj_topol.save(args.PRMTOP_FILE)
-
-
 	# conversion of trajectory file
 	trajectory_input = args.TRAJECTORY_FILE
-	ndx_file = None
-	if os.path.splitext(args.TRAJECTORY_FILE)[1] in [".gro", ".xtc"]:
-		# treat PBC
+	if os.path.splitext(args.TRAJECTORY_FILE)[1].lower() in [".gro", ".xtc"]:
+
+		# create .ndx file
+		process_i += 1
+		sys.stdout.write(colored("Process ({0}/{1}): {2}\n".format(process_i, max_process, "Generate initial .ndx file."), LOG_COLOR, attrs=["bold"]))
+		obj_ndx1 = FileNDX(obj_topol)
+		obj_ndx1.add_def("Center", args.CENTER_MASK)
+		ndx_file1 = tempfile_name_full + "1.ndx"
+		gmx_eof = None
+		if args.STRIP_MASK is None:
+			# no strip_mask
+			# output
+			gmx_eof = "<< 'EOF'\nSystem\nEOF"
+		else:
+			# when strip_mask is specified, create .ndx file
+			mask = "!({0})".format(args.STRIP_MASK)
+			obj_ndx1.add_def("Strip", mask).output_ndx(ndx_file1)
+
+			# output
+			gmx_eof = "<< 'EOF'\nStrip\nEOF"
+		obj_ndx1.output_ndx(ndx_file1)
+		delete_files.append(ndx_file1)
+
+
+		# create trajectory file with treating PBC
 		process_i += 1
 		sys.stdout.write(colored("Process ({0}/{1}): {2}\n".format(process_i, max_process, "Generate trajectory with adjusted molecules across the boundary."), LOG_COLOR, attrs=["bold"]))
 		gmx_arg = {
@@ -210,58 +253,103 @@ if __name__ == '__main__':
 			"-o": None,
 			"-b": args.BEGIN,
 			"-e": args.END,
+			"-n": ndx_file1,
 			"-skip": args.OFFSET,
 			"-pbc": "whole",
-			"-n": None,
 		}
-		gmx_eof = None
-
-		gmx_arg["-o"] = tempfile_name_full + "_step1_whole.trr"
+		step1_whole_trajectory = tempfile_name_full + "_step1_whole.trr"
 		if ambertools_ver >= 17:
-			gmx_arg["-o"] = tempfile_name_full + "_step1_whole.xtc"
-		delete_files.append(gmx_arg["-o"])
-
-		obj_ndx = FileNDX(obj_topol)
-		obj_ndx.add_def("Center", args.CENTER_MASK)
-		ndx_file = tempfile_name_full + ".ndx"
-		gmx_arg["-n"] = ndx_file
-		delete_files.append(gmx_arg["-n"])
-		if args.STRIP_MASK is None:
-			# no strip_mask
-			gmx_eof = "<< 'EOF'\nSystem\nEOF"
-		else:
-			# when strip_mask is specified, create .ndx file
-			mask = "!({0})".format(args.STRIP_MASK)
-			obj_ndx.add_def("Strip", mask).output_ndx(gmx_arg["-n"])
-			gmx_eof = "<< 'EOF'\nStrip\nEOF"
-
-		obj_ndx.output_ndx(gmx_arg["-n"])
+			step1_whole_trajectory = tempfile_name_full + "_step1_whole.xtc"
+		gmx_arg["-o"] = step1_whole_trajectory
 
 		command = " ".join([command_gmx, "trjconv"] + ["{0} {1}".format(o, v) for o, v in gmx_arg.items() if v is not None])
 		command += " " + gmx_eof
 		exec_sp(command, True)
+		delete_files.append(step1_whole_trajectory)
 
 
-		# treat cluster in PBC (Molecular collisions occur)
+		# create .gro file for new .tpr file
+		process_i += 1
+		sys.stdout.write(colored("Process ({0}/{1}): {2}\n".format(process_i, max_process, "Generate stripped .gro file."), LOG_COLOR, attrs=["bold"]))
+		tmp_gro_file = tempfile_name_full + "_tmp.gro"
+		gmx_arg = {
+			"-s": args.TPR_FILE,
+			"-f": args.TRAJECTORY_FILE,
+			"-o": tmp_gro_file,
+			"-b": 0,
+			"-e": 0,
+			"-n": ndx_file1,
+		}
+		command = " ".join([command_gmx, "trjconv"] + ["{0} {1}".format(o, v) for o, v in gmx_arg.items() if v is not None])
+		command += " " + gmx_eof
+		exec_sp(command, False)
+		delete_files.append(tmp_gro_file)
+
+
+		# create .top file
+		process_i += 1
+		sys.stdout.write(colored("Process ({0}/{1}): {2}\n".format(process_i, max_process, "Generate stripped .top file."), LOG_COLOR, attrs=["bold"]))
+		top_file = tempfile_name_full + ".top"
+		if args.STRIP_MASK is not None:
+			obj_topol.strip(args.STRIP_MASK)
+		obj_topol.save(top_file)
+		delete_files.append(top_file)
+
+
+		# create stripped .ndx file
+		process_i += 1
+		sys.stdout.write(colored("Process ({0}/{1}): {2}\n".format(process_i, max_process, "Generate stripped .ndx file."), LOG_COLOR, attrs=["bold"]))
+		obj_ndx2 = FileNDX(obj_topol)
+		obj_ndx2.add_def("Center", args.CENTER_MASK)
+		ndx_file2 = tempfile_name_full + "2.ndx"
+		obj_ndx2.output_ndx(ndx_file2)
+		delete_files.append(ndx_file2)
+
+
+		# create .mdp file
+		process_i += 1
+		sys.stdout.write(colored("Process ({0}/{1}): {2}\n".format(process_i, max_process, "Generate stripped .mdp file."), LOG_COLOR, attrs=["bold"]))
+		mdp_file = tempfile_name_full + ".mdp"
+		output_mdp(mdp_file)
+		delete_files.append(mdp_file)
+
+
+		# create stripped .tpr file
+		process_i += 1
+		sys.stdout.write(colored("Process ({0}/{1}): {2}\n".format(process_i, max_process, "Generate stripped .tpr file."), LOG_COLOR, attrs=["bold"]))
+		tpr_file = tempfile_name_full + ".tpr"
+		gmx_arg = {
+			"-f": mdp_file,
+			"-c": tmp_gro_file,
+			"-o": tpr_file,
+			"-p": top_file,
+			"-maxwarn": 100,
+		}
+		command = " ".join([command_gmx, "grompp"] + ["{0} {1}".format(o, v) for o, v in gmx_arg.items() if v is not None])
+		command += " " + gmx_eof
+		exec_sp(command, True)
+		delete_files.append(tpr_file)
+
+
+		# create trajectory file with treating cluster in PBC (Molecular collisions occur)
 		process_i += 1
 		sys.stdout.write(colored("Process ({0}/{1}): {2}\n".format(process_i, max_process, "Generate trajectory with adjusted molecules pairs."), LOG_COLOR, attrs=["bold"]))
-		del(gmx_arg["-b"], gmx_arg["-e"], gmx_arg["-skip"])
-		gmx_arg["-pbc"] = "cluster"
-
-		gmx_arg["-f"] = gmx_arg["-o"]
-		gmx_arg["-o"] = tempfile_name_full + "_step2_cluster.trr"
+		gmx_arg = {
+			"-s": tpr_file,
+			"-f": step1_whole_trajectory,
+			"-o": None,
+			"-n": ndx_file2,
+			"-pbc": "cluster",
+		}
+		step2_cluster_trajectory = tempfile_name_full + "_step2_cluster.trr"
 		if ambertools_ver >= 17:
-			gmx_arg["-o"] = tempfile_name_full + "_step2_cluster.xtc"
-		delete_files.append(gmx_arg["-o"])
-
-		if args.STRIP_MASK is None:
-			gmx_eof = "<< 'EOF'\nCenter\nSystem\nEOF"
-		else:
-			gmx_eof = "<< 'EOF'\nCenter\nStrip\nEOF"
-
+			step2_cluster_trajectory = tempfile_name_full + "_step2_cluster.xtc"
+		gmx_arg["-o"] = step2_cluster_trajectory
+		gmx_eof = "<< 'EOF'\nCenter\nSystem\nEOF"
 		command = " ".join([command_gmx, "trjconv"] + ["{0} {1}".format(o, v) for o, v in gmx_arg.items() if v is not None])
 		command += " " + gmx_eof
 		exec_sp(command, True)
+		delete_files.append(step2_cluster_trajectory)
 
 
 		# remove collision
@@ -269,23 +357,20 @@ if __name__ == '__main__':
 		sys.stdout.write(colored("Process ({0}/{1}): {2}\n".format(process_i, max_process, "Generate trajectory with molecular collisions removed."), LOG_COLOR, attrs=["bold"]))
 		gmx_arg["-pbc"] = "mol"
 		gmx_arg["-ur"] = "compact"
+		gmx_arg["-center"] = ""
 
 		gmx_arg["-f"] = gmx_arg["-o"]
-		gmx_arg["-o"] = tempfile_name_full + "_step3_mol.trr"
+		step3_mol_trajectory = tempfile_name_full + "_step3_mol.trr"
 		if ambertools_ver >= 17:
-			gmx_arg["-o"] = tempfile_name_full + "_step3_mol.xtc"
-		delete_files.append(gmx_arg["-o"])
+			step3_mol_trajectory = tempfile_name_full + "_step3_mol.xtc"
+		gmx_arg["-o"] = step3_mol_trajectory
 		trajectory_input = gmx_arg["-o"]
 
-		gmx_arg["-center"] = ""
-		if args.STRIP_MASK is None:
-			gmx_eof = "<< 'EOF'\nCenter\nSystem\nEOF"
-		else:
-			gmx_eof = "<< 'EOF'\nCenter\nStrip\nEOF"
-
+		gmx_eof = "<< 'EOF'\nCenter\nSystem\nEOF"
 		command = " ".join([command_gmx, "trjconv"] + ["{0} {1}".format(o, v) for o, v in gmx_arg.items() if v is not None])
 		command += " " + gmx_eof
 		exec_sp(command, True)
+		delete_files.append(gmx_arg["-o"])
 
 
 		# output .gro
@@ -312,14 +397,19 @@ if __name__ == '__main__':
 			sys.exit(0)
 
 
+	# create .prmtop
+	process_i += 1
+	sys.stdout.write(colored("Process ({0}/{1}): {2} => {3}\n".format(process_i, max_process, "Generate prmtop", args.PRMTOP_FILE), LOG_COLOR, attrs=["bold"]))
+	check_overwrite(args.PRMTOP_FILE, args.FLAG_OVERWRITE)
+	obj_topol.save(args.PRMTOP_FILE)
+
+
 	# final conversion (rot+trans)
 	check_overwrite(args.OUTPUT_FILE, args.FLAG_OVERWRITE)
 
-	temp_in = tempfile_name_full + ".in"
-	delete_files.append(temp_in)
-
 	process_i += 1
 	sys.stdout.write(colored("Process ({0}/{1}): {2} => {3}\n".format(process_i, max_process, "Generate trajectory with rotated and shifted molecules.", args.OUTPUT_FILE), LOG_COLOR, attrs=["bold"]))
+	temp_in = tempfile_name_full + ".in"
 	with open(temp_in, "w") as obj_output:
 		obj_output.write("parm {0}\n".format(args.PRMTOP_FILE))
 		obj_output.write("trajin {0}\n".format(trajectory_input))
@@ -329,6 +419,7 @@ if __name__ == '__main__':
 		obj_output.write("autoimage\n")
 		obj_output.write("trajout {0}\n".format(args.OUTPUT_FILE))
 		obj_output.write("go\n")
+	delete_files.append(temp_in)
 	exec_sp("{0} -i {1}".format(command_cpptraj, temp_in), True)
 
 
