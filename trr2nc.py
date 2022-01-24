@@ -422,7 +422,7 @@ if __name__ == '__main__':
 		obj_output.write("rms {0} first mass\n".format(args.CENTER_MASK))
 		obj_output.write("autoimage\n")
 		if os.path.splitext(args.OUTPUT_FILE)[1].lower() == ".pdb" and args.FLAG_MULTI:
-			obj_output.write("trajout {0} format pdb multi\n".format(os.path.splitext(args.OUTPUT_FILE)[0]))
+			obj_output.write("trajout {0} multi\n".format(args.OUTPUT_FILE))
 		else:
 			obj_output.write("trajout {0}\n".format(args.OUTPUT_FILE))
 		obj_output.write("go\n")
