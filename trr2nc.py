@@ -318,17 +318,20 @@ if __name__ == '__main__':
 		process_i += 1
 		sys.stdout.write(colored("Process ({0}/{1}): {2}\n".format(process_i, max_process, "Generate stripped .tpr file."), LOG_COLOR, attrs=["bold"]))
 		tpr_file = tempfile_name_full + ".tpr"
+		tmp_mdp_file = tempfile_name_full + ".mdp"
 		gmx_arg = {
 			"-f": mdp_file,
 			"-c": tmp_gro_file,
 			"-o": tpr_file,
 			"-p": top_file,
 			"-maxwarn": 100,
+			"-po": tmp_mdp_file,
 		}
 		command = " ".join([command_gmx, "grompp"] + ["{0} {1}".format(o, v) for o, v in gmx_arg.items() if v is not None])
 		command += " " + gmx_eof
 		exec_sp(command, True)
 		delete_files.append(tpr_file)
+		delete_files.append(tmp_mdp_file)
 
 
 		# create trajectory file with treating cluster in PBC (Molecular collisions occur)
