@@ -168,6 +168,7 @@ if __name__ == '__main__':
 	cpptraj_option.add_argument("-mc", dest="CENTER_MASK", metavar="CENTER_MASK", required=True, help="center mask for cpptraj")
 	cpptraj_option.add_argument("-ms", dest="STRIP_MASK", metavar="STRIP_MASK", help="strip mask for cpptraj")
 	cpptraj_option.add_argument("--cpptraj", dest="COMMAND_CPPTRAJ", metavar="COMMAND_CPPTRAJ", help="command line path for `cpptraj` (Default: autodetect)")
+	cpptraj_option.add_argument("--multi", dest="FLAG_MULTI", action="store_true", default=False, help="Output PDB file for each frame")
 
 	parser.add_argument("-O", dest="FLAG_OVERWRITE", action="store_true", default=False, help="overwrite forcibly")
 
@@ -420,7 +421,10 @@ if __name__ == '__main__':
 		obj_output.write("center {0} mass origin\n".format(args.CENTER_MASK))
 		obj_output.write("rms {0} first mass\n".format(args.CENTER_MASK))
 		obj_output.write("autoimage\n")
-		obj_output.write("trajout {0}\n".format(args.OUTPUT_FILE))
+		if os.path.splitext(args.OUTPUT_FILE)[1].lower() == ".pdb" and args.FLAG_MULTI:
+			obj_output.write("trajout {0} format pdb multi\n".format(os.path.splitext(args.OUTPUT_FILE)[0]))
+		else:
+			obj_output.write("trajout {0}\n".format(args.OUTPUT_FILE))
 		obj_output.write("go\n")
 	delete_files.append(temp_in)
 	exec_sp("{0} -i {1}".format(command_cpptraj, temp_in), True)

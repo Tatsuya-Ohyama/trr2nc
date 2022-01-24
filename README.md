@@ -1,4 +1,4 @@
-% trr2nc
+# trr2nc
 
 ## 概要
 Gromacs のトラジェクトリファイルを Amber のトラジェクトリファイルに変換するプログラム
@@ -46,6 +46,8 @@ $ trr2nc.py [-h] -s INPUT.tpr -x INPUT.<trr|xtc|gro> -o OUTPUT.<nc|mdcrd|xtc> -t
 		: トラジェクトリから削除する原子群の Ambermask
 	* `--cpptraj COMMAND_CPPTRAJ`
 		: `cpptraj` コマンドパス (Default: 自動検出)
+	* `--multi`
+		: 各フレーム毎に .pdb ファイルに出力する。
 
 
 ## 動作要件
@@ -64,6 +66,9 @@ This software is released under the MIT License, see LICENSE.
 
 
 ## ChangeLog
+### Ver. 19.2 (2022-01-24)
+* `--multi~` オプションを追加した。
+
 ### Ver. 19.1 (2022-01-24)
 * 中間ファイル `mdout.mdp` が残るバグを修正した。
 
