@@ -319,7 +319,7 @@ if __name__ == '__main__':
 		process_i += 1
 		sys.stdout.write(colored("Process ({0}/{1}): {2}\n".format(process_i, max_process, "Generate stripped .tpr file."), LOG_COLOR, attrs=["bold"]))
 		tpr_file = tempfile_name_full + ".tpr"
-		tmp_mdp_file = tempfile_name_full + ".mdp"
+		tmp_mdp_file = tempfile_name_full + "_out.mdp"
 		gmx_arg = {
 			"-f": mdp_file,
 			"-c": tmp_gro_file,
