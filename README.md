@@ -50,6 +50,24 @@ $ trr2nc.py [-h] -s INPUT.tpr -x INPUT.<trr|xtc|gro> -o OUTPUT.<nc|mdcrd|xtc> -t
 		: 各フレーム毎に .pdb ファイルに出力する。
 
 
+## pdb_separator.py
+トラジェクトリを .pdb ファイルに変換する際に誤って一つのファイルにまとめてしまった (`--multi` オプションを付け忘れた) 場合の救済プログラム
+
+### 使用方法
+```sh
+$ pdb_separator.py [-h] -i INPUT.pdb -o OUTPUT.pdb [-O]
+```
+
+* `-h`, `--help`
+	: ヘルプメッセージを表示して終了する。
+* `-i INPUT.pdb`
+	: 入力ファイル
+* `-o OUTPUT.pdb`
+	: 出力ファイルの接頭辞
+* `-O`
+	: プロンプトを出さずに上書きする。
+
+
 ## 動作要件
 * Python3
 	* numpy
@@ -66,8 +84,11 @@ This software is released under [the MIT License](https://opensource.org/license
 
 
 ## ChangeLog
+### Ver. 19.3 (2022-01-25)
+* `pdb_separator.py` を追加した。
+
 ### Ver. 19.2 (2022-01-24)
-* `--multi~` オプションを追加した。
+* `--multi` オプションを追加した。
 
 ### Ver. 19.1 (2022-01-24)
 * 中間ファイル `mdout.mdp` が残るバグを修正した。
