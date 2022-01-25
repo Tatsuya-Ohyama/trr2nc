@@ -58,7 +58,7 @@ $ trr2nc.py [-h] -s INPUT.tpr -x INPUT.<trr|xtc|gro> -o OUTPUT.<nc|mdcrd|xtc> -t
 
 
 ## License
-This software is released under the MIT License, see LICENSE.
+This software is released under [the MIT License](https://opensource.org/licenses/mit-license.php).
 
 
 ## Authors
