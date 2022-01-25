@@ -31,10 +31,12 @@ $ trr2nc.py [-h] -s INPUT.tpr -x INPUT.<trr|xtc|gro> -o OUTPUT.<nc|mdcrd|xtc> -t
 
 * Gromacs option:
 	* `-b START_TIME`
-		: 読み込み開始フレームインデックス (start from 0)
+		: 読み込み開始時間 (ps) (start from 0)
 	* `-e END_TIME`
-		: 読み込み終了フレームインデックス (start from 0)
-	* `--offset OFFSET`
+		: 読み込み終了時間 (ps) (start from 0)
+	* `-tu`
+		: 時間の単位 (Default: ps)
+	* `-skip OFFSET`
 		: 出力するフレームの間隔 (Default: 1)
 	* `--gmx COMMAND_GMX`
 		: `gmx` コマンドパス (Default: 自動検出)
@@ -84,6 +86,10 @@ This software is released under [the MIT License](https://opensource.org/license
 
 
 ## ChangeLog
+### Ver. 19.4 (2022-01-25)
+* `-tu` オプションを追加した。
+* コマンドライン引数の `-b` と `-e` の説明を変更した。
+
 ### Ver. 19.3 (2022-01-25)
 * `pdb_separator.py` を追加した。
 
