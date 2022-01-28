@@ -161,7 +161,7 @@ if __name__ == '__main__':
 	gmx_option = parser.add_argument_group("gromacs option")
 	gmx_option.add_argument("-b", dest="BEGIN", metavar="START_TIME", type=int, help="First frame index to read from trajectory (ps) (start from 0)")
 	gmx_option.add_argument("-e", dest="END", metavar="END_TIME", type=int, help="Last frame index to read from trajectory (ps) (start from 0)")
-	gmx_option.add_argument("-skip", dest="OFFSET", metavar="OFFSET", type=int, default=1, type=int, help="Only write every nr-th frame (Default: 1)")
+	gmx_option.add_argument("-skip", dest="OFFSET", metavar="OFFSET", type=int, default=1, help="Only write every nr-th frame (Default: 1)")
 	gmx_option.add_argument("-tu", dest="TIME_UNIT", metavar="TIME_UNIT", default="ps", choices=["fs", "ps", "ns", "us", "ms", "s"], help="Unit for time values: fs, ps, ns, us, ms, s (Default: ps)")
 	gmx_option.add_argument("--gmx", dest="COMMAND_GMX", metavar="COMMAND_GMX", help="command line path for `gmx` (Default: autodetect)")
 
