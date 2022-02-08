@@ -152,26 +152,28 @@ if __name__ == '__main__':
 
 	parser.add_argument("-s", dest="TPR_FILE", metavar="INPUT.tpr", required=True, help="Gromacs run input file")
 	parser.add_argument("-x", dest="TRAJECTORY_FILE", metavar="INPUT.<trr|xtc|gro>", required=True, help="Gromacs trajectory file")
-	parser.add_argument("-o", dest="OUTPUT_FILE", metavar="OUTPUT.<nc|mdcrd|xtc>", required=True, help="output trajectory")
+	parser.add_argument("-o", dest="OUTPUT_FILE", metavar="OUTPUT.<nc|mdcrd|xtc|pdb>", required=True, help="output trajectory")
 	parser.add_argument("-t", dest="TOP_FILE", metavar="INPUT.top", required=True, help="Gromacs topology file")
 	parser.add_argument("-p", dest="PRMTOP_FILE", metavar="OUTPUT.prmtop", required=True, help="Amber topology file")
 	parser.add_argument("-sc", dest="TEMP_DIR", metavar="TEMP_DIR", default=".", help="Temporary directory (Default: current dir)")
-	parser.add_argument("--separate-mol", dest="SEPARATE_MOL", metavar="MOL_NAME", nargs="+", default=[], help="separate molecules into individual molecules (specify molecule name written in .top file) (periodic boundary condition problem)")
 
 	gmx_option = parser.add_argument_group("gromacs option")
+	gmx_option.add_argument("--gmx", dest="COMMAND_GMX", metavar="COMMAND_GMX", help="command line path for `gmx` (Default: autodetect)")
 	gmx_option.add_argument("-b", dest="BEGIN", metavar="START_TIME", type=int, help="First frame index to read from trajectory (ps) (start from 0)")
 	gmx_option.add_argument("-e", dest="END", metavar="END_TIME", type=int, help="Last frame index to read from trajectory (ps) (start from 0)")
 	gmx_option.add_argument("-skip", dest="OFFSET", metavar="OFFSET", type=int, default=1, help="Only write every nr-th frame (Default: 1)")
 	gmx_option.add_argument("-tu", dest="TIME_UNIT", metavar="TIME_UNIT", default="ps", choices=["fs", "ps", "ns", "us", "ms", "s"], help="Unit for time values: fs, ps, ns, us, ms, s (Default: ps)")
-	gmx_option.add_argument("--gmx", dest="COMMAND_GMX", metavar="COMMAND_GMX", help="command line path for `gmx` (Default: autodetect)")
+	gmx_option.add_argument("--separate-mol", dest="SEPARATE_MOL", metavar="MOL_NAME", nargs="+", default=[], help="separate molecules into individual molecules (specify molecule name written in .top file) (periodic boundary condition problem)")
 
 	cpptraj_option = parser.add_argument_group("cpptraj option")
+	cpptraj_option.add_argument("--cpptraj", dest="COMMAND_CPPTRAJ", metavar="COMMAND_CPPTRAJ", help="command line path for `cpptraj` (Default: autodetect)")
 	cpptraj_option.add_argument("-mc", dest="CENTER_MASK", metavar="CENTER_MASK", required=True, help="center mask for cpptraj")
 	cpptraj_option.add_argument("-ms", dest="STRIP_MASK", metavar="STRIP_MASK", help="strip mask for cpptraj")
-	cpptraj_option.add_argument("--cpptraj", dest="COMMAND_CPPTRAJ", metavar="COMMAND_CPPTRAJ", help="command line path for `cpptraj` (Default: autodetect)")
 	cpptraj_option.add_argument("--multi", dest="FLAG_MULTI", action="store_true", default=False, help="Output PDB file for each frame")
+	cpptraj_option.add_argument("--leave-atom", dest="LEAVE_MASK", metavar="LEAVE_ATOM_MASK", help="amber mask for leaving atoms (Use in cases where water molecules are left at a certain distance from biomolecules. Only .pdb output can be used. ex.: `:1-20<:5.0`)")
 
 	parser.add_argument("-O", dest="FLAG_OVERWRITE", action="store_true", default=False, help="overwrite forcibly")
+	parser.add_argument("--keep", dest="FLAG_KEEP", action="store_true", default=False, help="Leave intermediate files")
 
 	args = parser.parse_args()
 
@@ -194,6 +196,10 @@ if __name__ == '__main__':
 		if ambertools_ver <= 16:
 			sys.stderr.write("ERROR: output of .xtc file is only supported in AmberTools version 17.0 or later.\n")
 			sys.exit(1)
+
+	if args.LEAVE_MASK is not None and os.path.splitext(args.OUTPUT_FILE)[1].lower() != ".pdb":
+		sys.stderr.write("ERROR: output file must be .pdb if `--leave-atom` option is used.\n")
+		sys.exit(1)
 
 	# determine name of temporary file
 	tempfile_name = ""
@@ -243,7 +249,8 @@ if __name__ == '__main__':
 			# output
 			gmx_eof = "<< 'EOF'\nStrip\nEOF"
 		obj_ndx1.output_ndx(ndx_file1)
-		delete_files.append(ndx_file1)
+		if not args.FLAG_KEEP:
+			delete_files.append(ndx_file1)
 
 
 		# create trajectory file with treating PBC
@@ -268,7 +275,8 @@ if __name__ == '__main__':
 		command = " ".join([command_gmx, "trjconv"] + ["{0} {1}".format(o, v) for o, v in gmx_arg.items() if v is not None])
 		command += " " + gmx_eof
 		exec_sp(command, True)
-		delete_files.append(step1_whole_trajectory)
+		if not args.FLAG_KEEP:
+			delete_files.append(step1_whole_trajectory)
 
 
 		# create .gro file for new .tpr file
@@ -286,7 +294,8 @@ if __name__ == '__main__':
 		command = " ".join([command_gmx, "trjconv"] + ["{0} {1}".format(o, v) for o, v in gmx_arg.items() if v is not None])
 		command += " " + gmx_eof
 		exec_sp(command, False)
-		delete_files.append(tmp_gro_file)
+		if not args.FLAG_KEEP:
+			delete_files.append(tmp_gro_file)
 
 
 		# create .top file
@@ -296,7 +305,8 @@ if __name__ == '__main__':
 		if args.STRIP_MASK is not None:
 			obj_topol.strip(args.STRIP_MASK)
 		obj_topol.save(top_file)
-		delete_files.append(top_file)
+		if not args.FLAG_KEEP:
+			delete_files.append(top_file)
 
 
 		# create stripped .ndx file
@@ -306,7 +316,8 @@ if __name__ == '__main__':
 		obj_ndx2.add_def("Center", args.CENTER_MASK)
 		ndx_file2 = tempfile_name_full + "2.ndx"
 		obj_ndx2.output_ndx(ndx_file2)
-		delete_files.append(ndx_file2)
+		if not args.FLAG_KEEP:
+			delete_files.append(ndx_file2)
 
 
 		# create .mdp file
@@ -314,7 +325,8 @@ if __name__ == '__main__':
 		sys.stdout.write(colored("Process ({0}/{1}): {2}\n".format(process_i, max_process, "Generate stripped .mdp file."), LOG_COLOR, attrs=["bold"]))
 		mdp_file = tempfile_name_full + ".mdp"
 		output_mdp(mdp_file)
-		delete_files.append(mdp_file)
+		if not args.FLAG_KEEP:
+			delete_files.append(mdp_file)
 
 
 		# create stripped .tpr file
@@ -333,8 +345,9 @@ if __name__ == '__main__':
 		command = " ".join([command_gmx, "grompp"] + ["{0} {1}".format(o, v) for o, v in gmx_arg.items() if v is not None])
 		command += " " + gmx_eof
 		exec_sp(command, True)
-		delete_files.append(tpr_file)
-		delete_files.append(tmp_mdp_file)
+		if not args.FLAG_KEEP:
+			delete_files.append(tpr_file)
+			delete_files.append(tmp_mdp_file)
 
 
 		# create trajectory file with treating cluster in PBC (Molecular collisions occur)
@@ -355,7 +368,8 @@ if __name__ == '__main__':
 		command = " ".join([command_gmx, "trjconv"] + ["{0} {1}".format(o, v) for o, v in gmx_arg.items() if v is not None])
 		command += " " + gmx_eof
 		exec_sp(command, True)
-		delete_files.append(step2_cluster_trajectory)
+		if not args.FLAG_KEEP:
+			delete_files.append(step2_cluster_trajectory)
 
 
 		# remove collision
@@ -376,7 +390,8 @@ if __name__ == '__main__':
 		command = " ".join([command_gmx, "trjconv"] + ["{0} {1}".format(o, v) for o, v in gmx_arg.items() if v is not None])
 		command += " " + gmx_eof
 		exec_sp(command, True)
-		delete_files.append(gmx_arg["-o"])
+		if not args.FLAG_KEEP:
+			delete_files.append(gmx_arg["-o"])
 
 
 		# output .gro
@@ -409,7 +424,6 @@ if __name__ == '__main__':
 	check_overwrite(args.PRMTOP_FILE, args.FLAG_OVERWRITE)
 	obj_topol.save(args.PRMTOP_FILE)
 
-
 	# final conversion (rot+trans)
 	check_overwrite(args.OUTPUT_FILE, args.FLAG_OVERWRITE)
 
@@ -423,12 +437,17 @@ if __name__ == '__main__':
 		obj_output.write("center {0} mass origin\n".format(args.CENTER_MASK))
 		obj_output.write("rms {0} first mass\n".format(args.CENTER_MASK))
 		obj_output.write("autoimage\n")
-		if os.path.splitext(args.OUTPUT_FILE)[1].lower() == ".pdb" and args.FLAG_MULTI:
-			obj_output.write("trajout {0} multi\n".format(args.OUTPUT_FILE))
+		if args.LEAVE_MASK is not None:
+			obj_output.write("mask {0} maskpdb {1}\n".format(args.LEAVE_MASK, args.OUTPUT_FILE))
 		else:
-			obj_output.write("trajout {0}\n".format(args.OUTPUT_FILE))
+			if os.path.splitext(args.OUTPUT_FILE)[1].lower() == ".pdb" and args.FLAG_MULTI:
+				obj_output.write("trajout {0} multi\n".format(args.OUTPUT_FILE))
+			else:
+				obj_output.write("trajout {0}\n".format(args.OUTPUT_FILE))
 		obj_output.write("go\n")
-	delete_files.append(temp_in)
+
+	if not args.FLAG_KEEP:
+		delete_files.append(temp_in)
 	exec_sp("{0} -i {1}".format(command_cpptraj, temp_in), True)
 
 
