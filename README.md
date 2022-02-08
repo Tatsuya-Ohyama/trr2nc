@@ -1,12 +1,12 @@
 # trr2nc
 
 ## 概要
-Gromacs のトラジェクトリファイルを Amber のトラジェクトリファイルに変換するプログラム
+Gromacs のトラジェクトリファイルを変換するプログラム
 
 
 ## 使用方法
 ```sh
-$ trr2nc.py [-h] -s INPUT.tpr -x INPUT.<trr|xtc|gro> -o OUTPUT.<nc|mdcrd|xtc> -t INPUT.top -p OUTPUT.prmtop [-sc TEMP_DIR] [--separate-mol MOL_NAME [MOL_NAME ...]] [-b START_TIME] [-e END_TIME] [--offset OFFSET] [--gmx COMMAND_GMX] -mc CENTER_MASK [-ms STRIP_MASK] [--cpptraj COMMAND_CPPTRAJ] [-O]
+$ trr2nc.py [-h] -s INPUT.tpr -x INPUT.<trr|xtc|gro> -o OUTPUT.<nc|mdcrd|xtc|pdb> -t INPUT.top -p OUTPUT.prmtop [-sc TEMP_DIR] [--gmx COMMAND_GMX] [-b START_TIME] [-e END_TIME] [-skip OFFSET] [-tu TIME_UNIT] [--separate-mol MOL_NAME [MOL_NAME ...]] [--cpptraj COMMAND_CPPTRAJ] -mc CENTER_MASK [-ms STRIP_MASK] [--multi] [--leave-atom LEAVE_ATOM_MASK] [-O] [--keep]
 ```
 
 * Basic options:
@@ -24,32 +24,36 @@ $ trr2nc.py [-h] -s INPUT.tpr -x INPUT.<trr|xtc|gro> -o OUTPUT.<nc|mdcrd|xtc> -t
 		: Amber のトポロジーファイル (Output)
 	* `-sc TEMP_DIR`
 		: 一時ファイルを置くためのディレクトリ (Default: カレントディレクトリ)
-	* `--separate-mol MOL_NAME [MOL_NAME ...]`
-		: .top ファイル内の `[ molecules ]` の分子を 1 つずつ分割するための分子名 (周期境界条件対策)
 	* `-O`
 		: プロンプトを出さずに上書きする。
+	* `--keep`
+		: 中間生成ファイルを残す。
 
 * Gromacs option:
+	* `--gmx COMMAND_GMX`
+		: `gmx` コマンドパス (Default: 自動検出)
 	* `-b START_TIME`
 		: 読み込み開始時間 (ps) (start from 0)
 	* `-e END_TIME`
 		: 読み込み終了時間 (ps) (start from 0)
-	* `-tu`
-		: 時間の単位 (Default: ps)
 	* `-skip OFFSET`
 		: 出力するフレームの間隔 (Default: 1)
-	* `--gmx COMMAND_GMX`
-		: `gmx` コマンドパス (Default: 自動検出)
+	* `-tu`
+		: 時間の単位 (Default: ps)
+	* `--separate-mol MOL_NAME [MOL_NAME ...]`
+		: .top ファイル内の `[ molecules ]` の分子を 1 つずつ分割するための分子名 (周期境界条件対策)
 
 * cpptraj option:
+	* `--cpptraj COMMAND_CPPTRAJ`
+		: `cpptraj` コマンドパス (Default: 自動検出)
 	* `-mc CENTER_MASK`
 		: トラジェクトリの中心に配置する原子群の Ambermask
 	* `-ms STRIP_MASK`
 		: トラジェクトリから削除する原子群の Ambermask
-	* `--cpptraj COMMAND_CPPTRAJ`
-		: `cpptraj` コマンドパス (Default: 自動検出)
 	* `--multi`
 		: 各フレーム毎に .pdb ファイルに出力する。
+	* `--leave-atom`
+		: 残す原子の Amber mask (生体分子から一定距離の水分子の切り出し等で使用する。出力は .pdb ファイルのみ使用可。例: `:1-20<:5.0`)
 
 
 ## pdb_separator.py
@@ -86,6 +90,10 @@ This software is released under [the MIT License](https://opensource.org/license
 
 
 ## ChangeLog
+### Ver. 19.5 (2022-02-08)
+* `--keep` オプションを追加した。
+* `--leave-atom` オプションを追加した。
+
 ### Ver. 19.4 (2022-01-25)
 * `-tu` オプションを追加した。
 * コマンドライン引数の `-b` と `-e` の説明を変更した。
