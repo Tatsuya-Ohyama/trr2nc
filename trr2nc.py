@@ -152,7 +152,7 @@ if __name__ == '__main__':
 
 	parser.add_argument("-s", dest="TPR_FILE", metavar="INPUT.tpr", required=True, help="Gromacs run input file")
 	parser.add_argument("-x", dest="TRAJECTORY_FILE", metavar="INPUT.<trr|xtc|gro>", required=True, help="Gromacs trajectory file")
-	parser.add_argument("-o", dest="OUTPUT_FILE", metavar="OUTPUT.<nc|mdcrd|xtc>", required=True, help="output trajectory")
+	parser.add_argument("-o", dest="OUTPUT_FILE", metavar="OUTPUT.<nc|mdcrd|xtc|pdb>", required=True, help="output trajectory")
 	parser.add_argument("-t", dest="TOP_FILE", metavar="INPUT.top", required=True, help="Gromacs topology file")
 	parser.add_argument("-p", dest="PRMTOP_FILE", metavar="OUTPUT.prmtop", required=True, help="Amber topology file")
 	parser.add_argument("-sc", dest="TEMP_DIR", metavar="TEMP_DIR", default=".", help="Temporary directory (Default: current dir)")
@@ -172,6 +172,7 @@ if __name__ == '__main__':
 	cpptraj_option.add_argument("--multi", dest="FLAG_MULTI", action="store_true", default=False, help="Output PDB file for each frame")
 
 	parser.add_argument("-O", dest="FLAG_OVERWRITE", action="store_true", default=False, help="overwrite forcibly")
+	parser.add_argument("--keep", dest="FLAG_KEEP", action="store_true", default=False, help="Leave intermediate files")
 
 	args = parser.parse_args()
 
@@ -243,7 +244,8 @@ if __name__ == '__main__':
 			# output
 			gmx_eof = "<< 'EOF'\nStrip\nEOF"
 		obj_ndx1.output_ndx(ndx_file1)
-		delete_files.append(ndx_file1)
+		if not args.FLAG_KEEP:
+			delete_files.append(ndx_file1)
 
 
 		# create trajectory file with treating PBC
@@ -268,7 +270,8 @@ if __name__ == '__main__':
 		command = " ".join([command_gmx, "trjconv"] + ["{0} {1}".format(o, v) for o, v in gmx_arg.items() if v is not None])
 		command += " " + gmx_eof
 		exec_sp(command, True)
-		delete_files.append(step1_whole_trajectory)
+		if not args.FLAG_KEEP:
+			delete_files.append(step1_whole_trajectory)
 
 
 		# create .gro file for new .tpr file
@@ -286,7 +289,8 @@ if __name__ == '__main__':
 		command = " ".join([command_gmx, "trjconv"] + ["{0} {1}".format(o, v) for o, v in gmx_arg.items() if v is not None])
 		command += " " + gmx_eof
 		exec_sp(command, False)
-		delete_files.append(tmp_gro_file)
+		if not args.FLAG_KEEP:
+			delete_files.append(tmp_gro_file)
 
 
 		# create .top file
@@ -296,7 +300,8 @@ if __name__ == '__main__':
 		if args.STRIP_MASK is not None:
 			obj_topol.strip(args.STRIP_MASK)
 		obj_topol.save(top_file)
-		delete_files.append(top_file)
+		if not args.FLAG_KEEP:
+			delete_files.append(top_file)
 
 
 		# create stripped .ndx file
@@ -306,7 +311,8 @@ if __name__ == '__main__':
 		obj_ndx2.add_def("Center", args.CENTER_MASK)
 		ndx_file2 = tempfile_name_full + "2.ndx"
 		obj_ndx2.output_ndx(ndx_file2)
-		delete_files.append(ndx_file2)
+		if not args.FLAG_KEEP:
+			delete_files.append(ndx_file2)
 
 
 		# create .mdp file
@@ -314,7 +320,8 @@ if __name__ == '__main__':
 		sys.stdout.write(colored("Process ({0}/{1}): {2}\n".format(process_i, max_process, "Generate stripped .mdp file."), LOG_COLOR, attrs=["bold"]))
 		mdp_file = tempfile_name_full + ".mdp"
 		output_mdp(mdp_file)
-		delete_files.append(mdp_file)
+		if not args.FLAG_KEEP:
+			delete_files.append(mdp_file)
 
 
 		# create stripped .tpr file
@@ -333,8 +340,9 @@ if __name__ == '__main__':
 		command = " ".join([command_gmx, "grompp"] + ["{0} {1}".format(o, v) for o, v in gmx_arg.items() if v is not None])
 		command += " " + gmx_eof
 		exec_sp(command, True)
-		delete_files.append(tpr_file)
-		delete_files.append(tmp_mdp_file)
+		if not args.FLAG_KEEP:
+			delete_files.append(tpr_file)
+			delete_files.append(tmp_mdp_file)
 
 
 		# create trajectory file with treating cluster in PBC (Molecular collisions occur)
@@ -355,7 +363,8 @@ if __name__ == '__main__':
 		command = " ".join([command_gmx, "trjconv"] + ["{0} {1}".format(o, v) for o, v in gmx_arg.items() if v is not None])
 		command += " " + gmx_eof
 		exec_sp(command, True)
-		delete_files.append(step2_cluster_trajectory)
+		if not args.FLAG_KEEP:
+			delete_files.append(step2_cluster_trajectory)
 
 
 		# remove collision
@@ -376,7 +385,8 @@ if __name__ == '__main__':
 		command = " ".join([command_gmx, "trjconv"] + ["{0} {1}".format(o, v) for o, v in gmx_arg.items() if v is not None])
 		command += " " + gmx_eof
 		exec_sp(command, True)
-		delete_files.append(gmx_arg["-o"])
+		if not args.FLAG_KEEP:
+			delete_files.append(gmx_arg["-o"])
 
 
 		# output .gro
@@ -428,7 +438,9 @@ if __name__ == '__main__':
 		else:
 			obj_output.write("trajout {0}\n".format(args.OUTPUT_FILE))
 		obj_output.write("go\n")
-	delete_files.append(temp_in)
+
+	if not args.FLAG_KEEP:
+		delete_files.append(temp_in)
 	exec_sp("{0} -i {1}".format(command_cpptraj, temp_in), True)
 
 
