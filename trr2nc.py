@@ -305,6 +305,8 @@ if __name__ == '__main__':
 		if args.STRIP_MASK is not None:
 			obj_topol.strip(args.STRIP_MASK)
 		obj_topol.save(top_file)
+		print(top_file)
+		sys.stdin.readline()
 		if not args.FLAG_KEEP:
 			delete_files.append(top_file)
 
@@ -435,8 +437,8 @@ if __name__ == '__main__':
 		obj_output.write("trajin {0}\n".format(trajectory_input))
 		obj_output.write("unwrap {0}\n".format(args.CENTER_MASK))
 		obj_output.write("center {0} mass origin\n".format(args.CENTER_MASK))
+		obj_output.write("image origin center familiar\n")
 		obj_output.write("rms {0} first mass\n".format(args.CENTER_MASK))
-		obj_output.write("autoimage\n")
 		if args.LEAVE_MASK is not None:
 			obj_output.write("mask {0} maskpdb {1}\n".format(args.LEAVE_MASK, args.OUTPUT_FILE))
 		else:

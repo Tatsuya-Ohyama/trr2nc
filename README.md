@@ -90,6 +90,9 @@ This software is released under [the MIT License](https://opensource.org/license
 
 
 ## ChangeLog
+### Ver. 19.6 (2022-08-10)
+* ボックス内の溶媒分子の座標がおかしくなるバグを修正した。
+
 ### Ver. 19.5 (2022-02-08)
 * `--keep` オプションを追加した。
 * `--leave-atom` オプションを追加した。
