@@ -6,7 +6,7 @@ Gromacs のトラジェクトリファイルを変換するプログラム
 
 ## 使用方法
 ```sh
-$ trr2nc.py [-h] -s INPUT.tpr -x INPUT.<trr|xtc|gro> -o OUTPUT.<nc|mdcrd|xtc|pdb> -t INPUT.top -p OUTPUT.prmtop [-sc TEMP_DIR] [--gmx COMMAND_GMX] [-b START_TIME] [-e END_TIME] [-skip OFFSET] [-tu TIME_UNIT] [--separate-mol MOL_NAME [MOL_NAME ...]] [--cpptraj COMMAND_CPPTRAJ] -mc CENTER_MASK [-ms STRIP_MASK] [--multi] [--leave-atom LEAVE_ATOM_MASK] [-O] [--keep]
+$ trr2nc.py [-h] -s INPUT.tpr -x INPUT.<trr|xtc|gro> -o OUTPUT.<nc|mdcrd|xtc|pdb> -t INPUT.top -p OUTPUT.prmtop [-sc TEMP_DIR] [--gmx COMMAND_GMX] [-b START_TIME] [-e END_TIME] [-skip OFFSET] [-tu TIME_UNIT] [--separate-mol MOL_NAME [MOL_NAME ...]] [--cpptraj COMMAND_CPPTRAJ] -mc CENTER_MASK [-ms STRIP_MASK] [--multi] [--leave-atom LEAVE_ATOM_MASK] [--old] [-O] [--keep]
 ```
 
 * Basic options:
@@ -54,6 +54,8 @@ $ trr2nc.py [-h] -s INPUT.tpr -x INPUT.<trr|xtc|gro> -o OUTPUT.<nc|mdcrd|xtc|pdb
 		: 各フレーム毎に .pdb ファイルに出力する。
 	* `--leave-atom`
 		: 残す原子の Amber mask (生体分子から一定距離の水分子の切り出し等で使用する。出力は .pdb ファイルのみ使用可。例: `:1-20<:5.0`)
+	* `--old`
+		: AmberTools のバージョンが 16 以前の場合に指定する (.xtc ファイルのサポートの有無のため)。
 
 
 ## pdb_separator.py
@@ -90,6 +92,12 @@ This software is released under [the MIT License](https://opensource.org/license
 
 
 ## ChangeLog
+### Ver. 19.7 (2023-07-07)
+* `--old` オプションを追加した (cpptraj のバージョンをプログラム内で認識せず、ユーザに指定してもらうようにした)。
+
+### Ver. 19.6 (2022-08-10)
+* ボックス内の溶媒分子の座標がおかしくなるバグを修正した。
+
 ### Ver. 19.5 (2022-02-08)
 * `--keep` オプションを追加した。
 * `--leave-atom` オプションを追加した。

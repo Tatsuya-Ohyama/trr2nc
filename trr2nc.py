@@ -3,7 +3,7 @@
 
 """
 trr2nc
-Program to convert Gromacs trajectory to AMBER trajectory
+Program to convert Gromacs trajectory
 """
 
 import sys
@@ -13,7 +13,6 @@ import argparse
 import subprocess
 import tempfile
 from termcolor import colored
-import re
 import parmed
 
 from mods.func_prompt_io import *
@@ -44,7 +43,6 @@ signal.signal(signal.SIGINT, delete_all)
 COMMAND_NAME_GMX = "gmx"
 COMMAND_NAME_CPPTRAJ = "cpptraj"
 LOG_COLOR = "yellow"
-RE_CPPTRAJ_VER = re.compile(r"CPPTRAJ: Version (V.+?) \(AmberTools (V.+?)\)")
 MDP_FILE = """
 integrator	= steep
 emtol		= 1000.0
@@ -90,21 +88,6 @@ def check_command(command_name):
 	command_path = stdout.rstrip("\r\n")
 
 	return command_path
-
-
-def get_cpptraj_ver(cpptraj_path):
-	"""
-	Function to get cpptraj and AmberTools versions
-
-	Args:
-		cpptraj_path (str): cpptraj path
-
-	Returns:
-		list: [cpptraj_ver, AmberTools_ver]
-	"""
-	obj_process = subprocess.run([cpptraj_path, "--version"], stdout=subprocess.PIPE, text=True)
-	obj_match = RE_CPPTRAJ_VER.search(obj_process.stdout)
-	return [obj_match.group(1), obj_match.group(2)]
 
 
 def exec_sp(command, operation=False):
@@ -171,6 +154,7 @@ if __name__ == '__main__':
 	cpptraj_option.add_argument("-ms", dest="STRIP_MASK", metavar="STRIP_MASK", help="strip mask for cpptraj")
 	cpptraj_option.add_argument("--multi", dest="FLAG_MULTI", action="store_true", default=False, help="Output PDB file for each frame")
 	cpptraj_option.add_argument("--leave-atom", dest="LEAVE_MASK", metavar="LEAVE_ATOM_MASK", help="amber mask for leaving atoms (Use in cases where water molecules are left at a certain distance from biomolecules. Only .pdb output can be used. ex.: `:1-20<:5.0`)")
+	cpptraj_option.add_argument("--old", dest="USE_OLD_CPPTRAJ", action="store_true", default=False, help="use this option when use AmberTools <= 16")
 
 	parser.add_argument("-O", dest="FLAG_OVERWRITE", action="store_true", default=False, help="overwrite forcibly")
 	parser.add_argument("--keep", dest="FLAG_KEEP", action="store_true", default=False, help="Leave intermediate files")
@@ -189,11 +173,8 @@ if __name__ == '__main__':
 	if command_cpptraj is None:
 		command_cpptraj = check_command(COMMAND_NAME_CPPTRAJ)
 
-	cpptraj_vers = get_cpptraj_ver(command_cpptraj)
-	ambertools_ver = int(cpptraj_vers[1][1:].split(".")[0])
-
 	if os.path.splitext(args.OUTPUT_FILE)[1].lower() == ".xtc":
-		if ambertools_ver <= 16:
+		if args.USE_OLD_CPPTRAJ:
 			sys.stderr.write("ERROR: output of .xtc file is only supported in AmberTools version 17.0 or later.\n")
 			sys.exit(1)
 
@@ -268,7 +249,7 @@ if __name__ == '__main__':
 			"-pbc": "whole",
 		}
 		step1_whole_trajectory = tempfile_name_full + "_step1_whole.trr"
-		if ambertools_ver >= 17:
+		if not args.USE_OLD_CPPTRAJ:
 			step1_whole_trajectory = tempfile_name_full + "_step1_whole.xtc"
 		gmx_arg["-o"] = step1_whole_trajectory
 
@@ -361,7 +342,7 @@ if __name__ == '__main__':
 			"-pbc": "cluster",
 		}
 		step2_cluster_trajectory = tempfile_name_full + "_step2_cluster.trr"
-		if ambertools_ver >= 17:
+		if not args.USE_OLD_CPPTRAJ:
 			step2_cluster_trajectory = tempfile_name_full + "_step2_cluster.xtc"
 		gmx_arg["-o"] = step2_cluster_trajectory
 		gmx_eof = "<< 'EOF'\nCenter\nSystem\nEOF"
@@ -381,7 +362,7 @@ if __name__ == '__main__':
 
 		gmx_arg["-f"] = gmx_arg["-o"]
 		step3_mol_trajectory = tempfile_name_full + "_step3_mol.trr"
-		if ambertools_ver >= 17:
+		if not args.USE_OLD_CPPTRAJ:
 			step3_mol_trajectory = tempfile_name_full + "_step3_mol.xtc"
 		gmx_arg["-o"] = step3_mol_trajectory
 		trajectory_input = gmx_arg["-o"]
@@ -435,8 +416,8 @@ if __name__ == '__main__':
 		obj_output.write("trajin {0}\n".format(trajectory_input))
 		obj_output.write("unwrap {0}\n".format(args.CENTER_MASK))
 		obj_output.write("center {0} mass origin\n".format(args.CENTER_MASK))
+		obj_output.write("image origin center familiar\n")
 		obj_output.write("rms {0} first mass\n".format(args.CENTER_MASK))
-		obj_output.write("autoimage\n")
 		if args.LEAVE_MASK is not None:
 			obj_output.write("mask {0} maskpdb {1}\n".format(args.LEAVE_MASK, args.OUTPUT_FILE))
 		else:
