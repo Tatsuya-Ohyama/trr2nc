@@ -3,7 +3,7 @@
 
 """
 trr2nc
-Program to convert Gromacs trajectory to AMBER trajectory
+Program to convert Gromacs trajectory
 """
 
 import sys
@@ -305,8 +305,6 @@ if __name__ == '__main__':
 		if args.STRIP_MASK is not None:
 			obj_topol.strip(args.STRIP_MASK)
 		obj_topol.save(top_file)
-		print(top_file)
-		sys.stdin.readline()
 		if not args.FLAG_KEEP:
 			delete_files.append(top_file)
 
